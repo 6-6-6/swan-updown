@@ -7,7 +7,7 @@ use std::path::Path;
 
 // get netns File descriptor by its name
 pub fn get_netns_by_name(name: &str) -> Result<File, ()> {
-    info!("open netns {}", name);
+    info!("opening netns {}", name);
     OpenOptions::new()
         .read(true)
         .open(Path::new("/run/netns").join(name))
@@ -16,11 +16,11 @@ pub fn get_netns_by_name(name: &str) -> Result<File, ()> {
 
 // after calling this function, the process will move into the given network namespace
 pub fn into_netns_by_fd(netns_fd: RawFd, name: &str) -> Result<(), ()> {
-    info!("switch to netns {}", name);
+    info!("switching to netns {}", name);
     let mut setns_flags = CloneFlags::empty();
     // unshare to the new network namespace
-    nix::sched::unshare(CloneFlags::CLONE_NEWNET).map_err(|e| error!("unshare error: {e}"))?;
+    nix::sched::unshare(CloneFlags::CLONE_NEWNET).map_err(|e| error!("Unshare error: {e}"))?;
     // set netns
     setns_flags.insert(CloneFlags::CLONE_NEWNET);
-    nix::sched::setns(netns_fd, setns_flags).map_err(|e| error!("setns error: {e}"))
+    nix::sched::setns(netns_fd, setns_flags).map_err(|e| error!("Setns error: {e}"))
 }

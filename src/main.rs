@@ -1,9 +1,16 @@
 use clap::Parser;
+use futures::future::{join_all, FutureExt};
 use log::LevelFilter;
-use log::{error, info};
+use log::{error, info, warn};
 use misc::synthesize;
+use std::collections::BTreeSet;
+use std::path::Path;
+use std::time::Duration;
 use syslog::{BasicLogger, Facility, Formatter3164};
+use tokio::time::timeout;
 
+mod babeld;
+mod executor;
 mod interface;
 mod misc;
 mod netns;
@@ -13,12 +20,22 @@ const MYSELF: &str = "swan-updown";
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct SwanUpdown {
-    /// Optional network namespace to move interfaces into
-    #[arg(short, long, value_name = "netns")]
-    netns: Option<String>,
-    /// the prefix of the created interfaces, default to [swan]
+    /// what module I will configure, can be specified multiple times
+    /// things available: [interface, babeld]
+    #[arg(long, value_name = "enable")]
+    enable: Vec<String>,
+
+    /// needed by [all],        the prefix of the created interfaces, default to [swan]
     #[arg(short, long, value_name = "prefix")]
     prefix: Option<String>,
+    /// needed by [interface],  Optional network namespace to move interfaces into
+    #[arg(short, long, value_name = "netns")]
+    netns: Option<String>,
+    /// needed by [babeld],     the socket path of the babeld control socket
+    #[arg(short, long, value_name = "prefix")]
+    babeld_ctl: Option<String>,
+
+    // for debug
     /// send log to stdout, otherwise the log will be sent to syslog
     #[arg(long, action = clap::ArgAction::SetTrue)]
     to_stdout: bool,
@@ -64,34 +81,39 @@ async fn main() -> Result<(), ()> {
     let conn_if_id: u32 = misc::find_env("PLUTO_IF_ID_IN")?
         .parse::<u32>()
         .map_err(|e| error! {"parse if_id failed: {}", e})?;
+    let interface_name = synthesize(&if_prefix, conn_if_id);
 
-    let handle = misc::netlink_handle()?;
+    let mut tasks = Vec::new();
+    let enabled_modules = BTreeSet::from_iter(args.enable);
+    for enabled in enabled_modules {
+        if enabled == "interface" {
+            tasks.push(
+                executor::interface_updown(&trigger, &args.netns, &interface_name, conn_if_id)
+                    .boxed(),
+            );
+            info!("enabling module interface");
+        } else if enabled == "babeld" {
+            match &args.babeld_ctl {
+                Some(socket_path) => {
+                    tasks.push(
+                        executor::babeld_updown(&trigger, &interface_name, Path::new(socket_path))
+                            .boxed(),
+                    );
+                    info!("enabling module babeld");
+                }
+                None => warn!(
+                    "Module babeld enabled but babeld control socket not specified, skipping.."
+                ),
+            };
+        }
+    }
 
-    // process by PLUTO_VERB
-    if trigger.starts_with("up-client") {
-        interface::new_xfrm(
-            &handle,
-            &misc::synthesize(&if_prefix, conn_if_id),
-            conn_if_id,
-        )
-        .await?;
-        if let Some(netns_name) = args.netns {
-            interface::move_to_netns(
-                &handle,
-                &misc::synthesize(&if_prefix, conn_if_id),
-                &netns_name,
-            )
-            .await?;
-        }
-    } else if trigger.starts_with("down-client") {
-        match args.netns {
-            Some(netns_name) => {
-                interface::del_in_netns(&synthesize(&if_prefix, conn_if_id), &netns_name).await?
-            }
-            None => interface::del(&handle, &synthesize(&if_prefix, conn_if_id)).await?,
-        }
-    } else {
-        info!("No action is taken for PLUTO_VERB {}", trigger)
+    for result in timeout(Duration::from_secs(60), join_all(tasks))
+        .await
+        .map_err(|e| error!("It takes too long to complete: {}", e))?
+        .into_iter()
+    {
+        result?
     }
 
     Ok(())

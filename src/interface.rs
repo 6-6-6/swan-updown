@@ -11,7 +11,7 @@ use rtnetlink::Handle;
 use std::os::unix::prelude::AsRawFd;
 
 pub async fn new_xfrm(handle: &Handle, interface: &str, if_id: u32) -> Result<(), ()> {
-    info!("add new xfrm interface {}, if_id {}", interface, if_id);
+    info!("adding new xfrm interface {}, if_id {}", interface, if_id);
 
     let mut add_device_req = handle.link().add();
     let mut add_device_msg = add_device_req.message_mut();
@@ -36,7 +36,7 @@ pub async fn new_xfrm(handle: &Handle, interface: &str, if_id: u32) -> Result<()
 
 // wrapper to delete an interface by its name
 pub async fn del(handle: &Handle, interface: &str) -> Result<(), ()> {
-    info!("delete interface {}", interface);
+    info!("deleting interface {}", interface);
 
     let mut del_req = handle.link().del(0);
 
@@ -60,7 +60,7 @@ pub async fn del_in_netns(interface: &str, netns_name: &str) -> Result<(), ()> {
 
 // move an interface to the given netns
 pub async fn move_to_netns(handle: &Handle, interface: &str, netns_name: &str) -> Result<(), ()> {
-    info!("move interface {} to netns {}", interface, netns_name);
+    info!("moving interface {} to netns {}", interface, netns_name);
 
     let netns_file = netns::get_netns_by_name(netns_name)?;
 
