@@ -22,7 +22,7 @@ It [creates / destroys] XFRM interface when an SA is [established / deleted].
 
 The name of the interface is based on the `--prefix` argument and the `PLUTO_IF_ID_IN` environment variable.
 
-Additionally, if `--netns` is specified, the interface will be moved into the netns.
+Additionally, if `--netns` is specified, the interface will be moved into the given netns.
 
 #### babeld
 It makes babeld daemon [operate / stop operating] on the interface mentioned above.

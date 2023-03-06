@@ -20,8 +20,7 @@ const MYSELF: &str = "swan-updown";
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct SwanUpdown {
-    /// what module I will configure, can be specified multiple times
-    /// things available: [interface, babeld]
+    /// things available: [interface, babeld], can be specified multiple times
     #[arg(long, value_name = "enable")]
     enable: Vec<String>,
 
