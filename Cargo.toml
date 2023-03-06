@@ -1,13 +1,28 @@
 [package]
-name = "rait-updown"
+name = "swan-updown"
 version = "0.1.0"
 edition = "2021"
+authors = ["Zhang Zongyu <zongyu@novazy.net>"]
+license = "MIT"
+repository = "https://github.com/6-6-6/swan-updown"
+homepage = "https://github.com/6-6-6/swan-updown"
+description = "Proxying Neighbor Discovery packets among interfaces."
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 rtnetlink = "0.12.0"
 netlink-packet-route = "0.15.0"
-futures = "0.3.11"
-tokio = { version = "1.9.0", features = ["sync", "rt-multi-thread", "macros"] }
-nix ="*"
+tokio = { version = "1.26.0", default-features = false, features = ["rt-multi-thread", "macros"] }
+nix = { version = "0.26.2", default-features = false, features = ["sched"]}
+clap = { version = "4.1.8", features = ["derive"] }
+hex = { version = "0.4.3" }
+syslog = "6.0.1"
+env_logger = { version = "0.10.0", default-features = false }
+log = { version = "0.4.17", features = ["release_max_level_debug"] }
+
+[profile.release]
+strip = true
+lto = true
+panic = "abort"

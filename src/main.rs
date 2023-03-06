@@ -1,106 +1,98 @@
-use netlink_packet_route::rtnl;
-use netlink_packet_route::rtnl::link::nlas::Info;
-use netlink_packet_route::rtnl::link::nlas::InfoData;
-use netlink_packet_route::rtnl::link::nlas::InfoKind;
-use netlink_packet_route::rtnl::link::nlas::InfoXfrmTun;
-use netlink_packet_route::rtnl::link::nlas::Nla;
-use rtnetlink::{new_connection, Handle};
-use std::fs::OpenOptions;
-use std::os::unix::prelude::{AsRawFd, RawFd};
-use std::path::Path;
+use clap::Parser;
+use log::LevelFilter;
+use log::{error, info};
+use misc::synthesize;
+use syslog::{BasicLogger, Facility, Formatter3164};
 
-use nix::sched::CloneFlags;
+mod interface;
+mod misc;
+mod netns;
+
+const MYSELF: &str = "swan-updown";
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct SwanUpdown {
+    /// Optional network namespace to move interfaces into
+    #[arg(short, long, value_name = "netns")]
+    netns: Option<String>,
+    /// the prefix of the created interfaces, default to [swan]
+    #[arg(short, long, value_name = "prefix")]
+    prefix: Option<String>,
+    /// send log to stdout, otherwise the log will be sent to syslog
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    to_stdout: bool,
+    /// set log level
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    debug: u8,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), ()> {
-    let (connection, handle, _) = new_connection().unwrap();
-    let netns = OpenOptions::new()
-        .read(true)
-        .open(Path::new("/run/netns").join("test"))
-        .unwrap();
-    tokio::spawn(connection);
+    let args = SwanUpdown::parse();
 
-    println!("Hello, world!");
-    new_device(&handle, "test-xfrm").await.unwrap();
-    println!("Hello, world!");
-    move_device_to_namespace(&handle, "test-xfrm", (&netns).as_raw_fd())
-        .await
-        .unwrap();
-    println!("Hello, world!");
-    del_device_netns("test-xfrm", (&netns).as_raw_fd())
-        .await
-        .unwrap();
-    println!("Hello, world!");
-
-    Ok(())
-}
-
-async fn new_device(handle: &Handle, interface: &str) -> Result<(), String> {
-    let mut add_device_req = handle.link().add();
-    let mut add_device_msg = add_device_req.message_mut();
-    // header
-    add_device_msg.header.link_layer_type = rtnl::ARPHRD_NONE;
-    add_device_msg.header.flags = rtnl::IFF_UP | rtnl::IFF_MULTICAST;
-    // body
-    let if_name = Nla::IfName(interface.into());
-    let if_parent = Nla::Link(1);
-    let xfrm_parent = InfoXfrmTun::Link(1);
-    let xfrm_ifid = InfoXfrmTun::IfId(114);
-    let xfrm_meta = Info::Data(InfoData::Xfrm(vec![xfrm_parent, xfrm_ifid]));
-    let if_info = Nla::Info(vec![Info::Kind(InfoKind::Xfrm), xfrm_meta]);
-    add_device_msg.nlas.push(if_name);
-    add_device_msg.nlas.push(if_parent);
-    add_device_msg.nlas.push(if_info);
-    // exec
-    add_device_req.execute().await.map_err(|e| format!("{}", e))
-}
-
-async fn del_device(handle: &Handle, interface: &str) -> Result<(), String> {
-    let mut del_req = handle.link().del(0);
-
-    let if_name = Nla::IfName(interface.into());
-    del_req.message_mut().nlas.push(if_name);
-    //
-    del_req.execute().await.map_err(|e| format!("{}", e))
-}
-
-// after calling this function, the process will move into the given network namespace
-async fn del_device_netns(interface: &str, netns_fd: RawFd) -> Result<(), String> {
-    let mut setns_flags = CloneFlags::empty();
-
-    // unshare to the new network namespace
-    if let Err(e) = nix::sched::unshare(CloneFlags::CLONE_NEWNET) {
-        let err_msg = format!("unshare error: {e}");
-        return Err(err_msg);
-    }
-
-    setns_flags.insert(CloneFlags::CLONE_NEWNET);
-    if let Err(e) = nix::sched::setns(netns_fd, setns_flags) {
-        let err_msg = format!("setns error: {e}");
-        return Err(err_msg);
+    // debug level
+    let my_loglevel = match args.debug {
+        0 => LevelFilter::Error,
+        1 => LevelFilter::Warn,
+        2 => LevelFilter::Info,
+        _ => LevelFilter::Debug,
     };
 
-    let (connection, handle, _) = new_connection().unwrap();
-    tokio::spawn(connection);
+    if args.to_stdout {
+        // use stdout
+        env_logger::init();
+    } else {
+        // use syslog
+        let formatter = Formatter3164 {
+            facility: Facility::LOG_USER,
+            hostname: None,
+            process: MYSELF.into(),
+            pid: 42,
+        };
+        let logger =
+            syslog::unix(formatter).map_err(|e| error!("failed to create logger: {}", e))?;
+        match log::set_boxed_logger(Box::new(BasicLogger::new(logger))) {
+            Ok(_) => log::set_max_level(my_loglevel),
+            Err(_) => return Err(()),
+        };
+    }
 
-    let mut del_req = handle.link().del(0);
-    let if_name = Nla::IfName(interface.into());
-    del_req.message_mut().nlas.push(if_name);
-    del_req.execute().await.map_err(|e| format!("{}", e))
-}
+    let if_prefix = args.prefix.unwrap_or_else(|| "swan".into());
+    let trigger = misc::find_env("PLUTO_VERB")?;
+    // TODO: what if IF_ID_IN and IF_ID_OUT are different?
+    let conn_if_id: u32 = misc::find_env("PLUTO_IF_ID_IN")?
+        .parse::<u32>()
+        .map_err(|e| error! {"parse if_id failed: {}", e})?;
 
-async fn move_device_to_namespace(
-    handle: &Handle,
-    interface: &str,
-    namespace: RawFd,
-) -> Result<(), String> {
-    handle
-        .link()
-        .set(0)
-        .name(interface.into())
-        .setns_by_fd(namespace)
-        .up()
-        .execute()
-        .await
-        .map_err(|e| format!("{}", e))
+    let handle = misc::netlink_handle()?;
+
+    // process by PLUTO_VERB
+    if trigger.starts_with("up-client") {
+        interface::new_xfrm(
+            &handle,
+            &misc::synthesize(&if_prefix, conn_if_id),
+            conn_if_id,
+        )
+        .await?;
+        if let Some(netns_name) = args.netns {
+            interface::move_to_netns(
+                &handle,
+                &misc::synthesize(&if_prefix, conn_if_id),
+                &netns_name,
+            )
+            .await?;
+        }
+    } else if trigger.starts_with("down-client") {
+        match args.netns {
+            Some(netns_name) => {
+                interface::del_in_netns(&synthesize(&if_prefix, conn_if_id), &netns_name).await?
+            }
+            None => interface::del(&handle, &synthesize(&if_prefix, conn_if_id)).await?,
+        }
+    } else {
+        info!("No action is taken for PLUTO_VERB {}", trigger)
+    }
+
+    Ok(())
 }
