@@ -1,13 +1,15 @@
-use log::{debug, error};
+use log::{debug, info, error};
 use std::path::Path;
 use tokio::{io, net::UnixStream};
 
 pub async fn add_interface(socket: &Path, interface: &str) -> Result<(), ()> {
+    info!("adding interface {} to babeld, socket path is {}", interface, socket.display());
     let command = format!("interface {}\nquit\n", interface).into_bytes();
     send_command(socket, &command).await
 }
 
 pub async fn del_interface(socket: &Path, interface: &str) -> Result<(), ()> {
+    info!("deleting interface {} from babeld, socket path is {}", interface, socket.display());
     let command = format!("flush interface {}\nquit\n", interface).into_bytes();
     send_command(socket, &command).await
 }
