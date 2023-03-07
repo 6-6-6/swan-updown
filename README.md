@@ -4,7 +4,7 @@ see [updown plugin](https://docs.strongswan.org/docs/5.9/plugins/updown.html).
 
 First, it parses `PLUTO_*` and cli args.
 
-Then it helps create ipsec interfaces on-demand and log to syslog.
+Then it helps create ipsec interfaces on demand and log to syslog.
 
 
 ### usage
