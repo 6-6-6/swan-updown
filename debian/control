@@ -1,0 +1,14 @@
+Source: swan-updown
+Section: net
+Priority: optional
+Maintainer: Zhang Zongyu <zongyu@novazy.net>
+Uploaders: Zhang Zongyu <zongyu@novazy.net>
+Standards-Version: 0.2.0
+Vcs-Browser: https://www.github.com/6-6-6/swan-updown
+Vcs-Git: https://www.github.com/6-6-6/swan-updown
+Homepage: https://www.github.com/6-6-6/swan-updown
+
+Package: swan-updown
+Architecture: linux-any
+Depends: 
+Description: swan-updown helps create XFRM interfaces on demand
