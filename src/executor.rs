@@ -4,8 +4,6 @@ use crate::interface;
 use crate::interface::GetResults;
 use log::info;
 
-// be careful when interface is configured in namespaces
-// interface::move_to_netns() may affect other functions
 pub async fn interface_updown(
     trigger: &str,
     netns: Option<String>,
@@ -28,12 +26,11 @@ pub async fn interface_updown(
             _ => interface::del_in_netns(netns, interface_name).await,
         }
     } else {
-        info!("No action is taken for PLUTO_VERB {}", trigger);
+        info!("[interface_updown] No action is taken for PLUTO_VERB {}", trigger);
         Ok(())
     }
 }
 
-//
 pub async fn babeld_updown(
     trigger: &str,
     interface_name: &str,
@@ -45,7 +42,7 @@ pub async fn babeld_updown(
     } else if trigger.starts_with("down-client") {
         babeld::del_interface(socket_path, interface_name).await
     } else {
-        info!("No action is taken for PLUTO_VERB {}", trigger);
+        info!("[babeld_updown] No action is taken for PLUTO_VERB {}", trigger);
         Ok(())
     }
 }

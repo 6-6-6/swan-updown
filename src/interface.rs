@@ -101,7 +101,8 @@ pub async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
                         return Err(GetResults::TypeNotMatch);
                     }
                     Info::Data(InfoData::Xfrm(info_data)) => {
-                        while let Some(InfoXfrmTun::IfId(if_id)) = info_data.iter().next() {
+                        let mut info_data_iter = info_data.iter();
+                        while let Some(InfoXfrmTun::IfId(if_id)) = info_data_iter.next() {
                             if expected_if_id.ne(if_id) {
                                 info!("get interface {}, but if_id {} was not the expected value ({})", name, if_id, expected_if_id);
                                 return Err(GetResults::IfIdNotMatch);
@@ -136,6 +137,7 @@ pub async fn add_to_netns(
 pub async fn del_in_netns(netns_name: Option<String>, interface: String) -> Result<(), ()> {
     match netns_name {
         None => del(interface).await,
+        #[allow(clippy::unit_arg)]
         Some(my_netns_name) => netns::operate_in_netns(my_netns_name, del(interface))
             .await
             .unwrap_or_else(|e| Err(error!("{}", e))),

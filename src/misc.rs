@@ -1,10 +1,19 @@
-use log::{error, trace};
+use log::{error, info, trace};
 use rtnetlink::{new_connection, Handle};
 use std::env;
 
 #[inline(always)]
 pub fn find_env(key: &str) -> Result<String, ()> {
-    env::var(key).map_err(|e| error!("Environment variable {} not found: {}, exiting...", key, e))
+    match env::var(key) {
+        Ok(value) => {
+            info!("Environment variable {} found: {}", key, value);
+            Ok(value)
+        },
+        Err(e) => {
+            error!("Environment variable {} not found: {}, exiting...", key, e);
+            Err(())
+        }
+    }
 }
 
 #[inline(always)]
