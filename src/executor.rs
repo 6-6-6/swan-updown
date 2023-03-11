@@ -1,34 +1,34 @@
 use std::path::Path;
-
 use crate::babeld;
 use crate::interface;
-use crate::misc;
 use log::info;
 
 // be careful when interface is configured in namespaces
 // interface::move_to_netns() may affect other functions
 pub async fn interface_updown(
     trigger: &str,
-    netns: &Option<String>,
-    interface_name: &str,
+    netns: Option<String>,
+    interface_name: String,
     conn_if_id: u32,
 ) -> Result<(), ()> {
-    let handle = misc::netlink_handle()?;
     // process by PLUTO_VERB
     if trigger.starts_with("up-client") {
-        interface::new_xfrm(&handle, interface_name, conn_if_id).await?;
-        if let Some(netns_name) = netns {
-            interface::move_to_netns(&handle, interface_name, netns_name).await?;
+        match interface::get_in_netns(netns.clone(), interface_name.clone(), conn_if_id).await {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                interface::del_in_netns(netns.clone(), interface_name.clone()).await?;
+                interface::add_to_netns(netns, interface_name, conn_if_id).await
+            }
         }
     } else if trigger.starts_with("down-client") {
-        match netns {
-            Some(netns_name) => interface::del_in_netns(interface_name, netns_name).await?,
-            None => interface::del(&handle, interface_name).await?,
+        match interface::get_in_netns(netns.clone(), interface_name.clone(), conn_if_id).await {
+            Ok(()) => interface::del_in_netns(netns, interface_name).await,
+            Err(_) => Ok(()),
         }
     } else {
-        info!("No action is taken for PLUTO_VERB {}", trigger)
+        info!("No action is taken for PLUTO_VERB {}", trigger);
+        Ok(())
     }
-    Ok(())
 }
 
 //

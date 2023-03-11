@@ -18,5 +18,6 @@ pub fn netlink_handle() -> Result<Handle, ()> {
 
 #[inline(always)]
 pub fn synthesize(if_prefix: &str, if_id: u32) -> String {
-    format!("{}{}", if_prefix, hex::encode(if_id.to_ne_bytes()))
+    // use big-endian for better readability
+    format!("{}{}", if_prefix, hex::encode(if_id.to_be_bytes()))
 }

@@ -87,8 +87,13 @@ async fn main() -> Result<(), ()> {
     for enabled in enabled_modules {
         if enabled == "interface" {
             tasks.push(
-                executor::interface_updown(&trigger, &args.netns, &interface_name, conn_if_id)
-                    .boxed(),
+                executor::interface_updown(
+                    &trigger,
+                    args.netns.clone(),
+                    interface_name.clone(),
+                    conn_if_id,
+                )
+                .boxed(),
             );
             info!("enabling module interface");
         } else if enabled == "babeld" {

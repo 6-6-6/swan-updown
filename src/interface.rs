@@ -1,5 +1,6 @@
 use crate::misc;
 use crate::netns;
+use futures::TryStreamExt;
 use log::{error, info};
 use netlink_packet_route::rtnl;
 use netlink_packet_route::rtnl::link::nlas::Info;
@@ -7,19 +8,29 @@ use netlink_packet_route::rtnl::link::nlas::InfoData;
 use netlink_packet_route::rtnl::link::nlas::InfoKind;
 use netlink_packet_route::rtnl::link::nlas::InfoXfrmTun;
 use netlink_packet_route::rtnl::link::nlas::Nla;
-use rtnetlink::Handle;
 use std::os::unix::prelude::AsRawFd;
 
-pub async fn new_xfrm(handle: &Handle, interface: &str, if_id: u32) -> Result<(), ()> {
+#[derive(Debug)]
+pub enum GetResults {
+    TypeNotMatch,
+    IfIdNotMatch,
+    NotFound,
+    TokioJoinError,
+    NoHandle,
+}
+
+// waiting for new rtnetlink release
+pub async fn new_xfrm(interface: String, if_id: u32) -> Result<(), ()> {
     info!("adding new xfrm interface {}, if_id {}", interface, if_id);
 
+    let handle = misc::netlink_handle()?;
     let mut add_device_req = handle.link().add();
     let mut add_device_msg = add_device_req.message_mut();
     // header
     add_device_msg.header.link_layer_type = rtnl::ARPHRD_NONE;
     add_device_msg.header.flags = rtnl::IFF_UP | rtnl::IFF_MULTICAST;
     // set its name
-    let if_name = Nla::IfName(interface.into());
+    let if_name = Nla::IfName(interface.clone());
     add_device_msg.nlas.push(if_name);
     // set the necessary info for adding a xfrm iface
     let xfrm_parent = InfoXfrmTun::Link(1);
@@ -35,12 +46,13 @@ pub async fn new_xfrm(handle: &Handle, interface: &str, if_id: u32) -> Result<()
 }
 
 // wrapper to delete an interface by its name
-pub async fn del(handle: &Handle, interface: &str) -> Result<(), ()> {
+pub async fn del(interface: String) -> Result<(), ()> {
     info!("deleting interface {}", interface);
 
+    let handle = misc::netlink_handle()?;
     let mut del_req = handle.link().del(0);
 
-    let if_name = Nla::IfName(interface.into());
+    let if_name = Nla::IfName(interface.clone());
     del_req.message_mut().nlas.push(if_name);
 
     del_req
@@ -49,28 +61,94 @@ pub async fn del(handle: &Handle, interface: &str) -> Result<(), ()> {
         .map_err(|e| error!("Failed to del interface {}: {}", interface, e))
 }
 
-// wrapper to delete an interface by its name in a given netns
-pub async fn del_in_netns(interface: &str, netns_name: &str) -> Result<(), ()> {
-    let netns_file = netns::get_netns_by_name(netns_name)?;
-    netns::into_netns_by_fd(netns_file.as_raw_fd(), netns_name)?;
-
-    let handle = misc::netlink_handle()?;
-    del(&handle, interface).await
-}
-
 // move an interface to the given netns
-pub async fn move_to_netns(handle: &Handle, interface: &str, netns_name: &str) -> Result<(), ()> {
+pub async fn move_to_netns(interface: String, netns_name: &str) -> Result<(), ()> {
     info!("moving interface {} to netns {}", interface, netns_name);
 
+    let handle = misc::netlink_handle()?;
     let netns_file = netns::get_netns_by_name(netns_name)?;
 
     handle
         .link()
         .set(0)
-        .name(interface.into())
+        .name(interface.clone())
         .setns_by_fd(netns_file.as_raw_fd())
         .up()
         .execute()
         .await
         .map_err(|e| error!("Failed to move {} to netns: {}", interface, e))
+}
+
+pub async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
+    // log
+    let handle = misc::netlink_handle().map_err(|_| GetResults::NoHandle)?;
+    let mut links = handle.link().get().match_name(name).execute();
+    //
+    if let Some(link) = links.try_next().await.map_err(|_| GetResults::NotFound)? {
+        while let Some(Nla::Info(infos)) = link.nlas.first() {
+            for info in infos {
+                match info {
+                    Info::Kind(InfoKind::Xfrm) => continue,
+                    Info::Kind(InfoKind::Other(desc)) => {
+                        if desc.ne("xfrm") {
+                            return Err(GetResults::TypeNotMatch);
+                        }
+                    }
+                    Info::Data(InfoData::Xfrm(info_data)) => {
+                        while let Some(InfoXfrmTun::IfId(if_id)) = info_data.iter().next() {
+                            if expected_if_id.ne(if_id) {
+                                return Err(GetResults::IfIdNotMatch);
+                            }
+                        }
+                    }
+                    _ => continue,
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+// wrapper to add an XFRM interface by its name in a given netns
+pub async fn add_to_netns(
+    netns_name: Option<String>,
+    interface: String,
+    if_id: u32,
+) -> Result<(), ()> {
+    match netns_name {
+        None => new_xfrm(interface, if_id).await,
+        Some(my_netns_name) => {
+            new_xfrm(interface.clone(), if_id).await?;
+            move_to_netns(interface, &my_netns_name).await
+        }
+    }
+}
+
+// wrapper to delete an interface by its name in a given netns
+pub async fn del_in_netns(netns_name: Option<String>, interface: String) -> Result<(), ()> {
+    match netns_name {
+        None => del(interface).await,
+        Some(my_netns_name) => netns::operate_in_netns(my_netns_name, del(interface))
+            .await
+            .unwrap_or_else(|e| Err(error!("{}", e))),
+    }
+}
+
+// wrapper to get an interface by its name in a given netns
+pub async fn get_in_netns(
+    netns_name: Option<String>,
+    interface: String,
+    expected_if_id: u32,
+) -> Result<(), GetResults> {
+    match netns_name {
+        None => get(interface, expected_if_id).await,
+        Some(my_netns_name) => {
+            netns::operate_in_netns(my_netns_name, get(interface, expected_if_id))
+                .await
+                .unwrap_or_else(|e| {
+                    error!("{}", e);
+                    Err(GetResults::TokioJoinError)
+                })
+        }
+    }
 }
