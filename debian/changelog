@@ -1,3 +1,10 @@
+
+swan-updown (0.2.1) stable; urgency=low
+
+  * reduce errors
+
+ -- Zhang Zongyu <zongyu@novazy.net>  Sat, 11 Mar 2023 10:35:30 +0000
+
 swan-updown (0.2.0) stable; urgency=low
 
   * initial release
