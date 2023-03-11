@@ -1,6 +1,7 @@
 use std::path::Path;
 use crate::babeld;
 use crate::interface;
+use crate::interface::GetResults;
 use log::info;
 
 // be careful when interface is configured in namespaces
@@ -15,6 +16,7 @@ pub async fn interface_updown(
     if trigger.starts_with("up-client") {
         match interface::get_in_netns(netns.clone(), interface_name.clone(), conn_if_id).await {
             Ok(()) => Ok(()),
+            Err(GetResults::NotFound) => interface::add_to_netns(netns, interface_name, conn_if_id).await,
             Err(_) => {
                 interface::del_in_netns(netns.clone(), interface_name.clone()).await?;
                 interface::add_to_netns(netns, interface_name, conn_if_id).await
@@ -22,8 +24,8 @@ pub async fn interface_updown(
         }
     } else if trigger.starts_with("down-client") {
         match interface::get_in_netns(netns.clone(), interface_name.clone(), conn_if_id).await {
-            Ok(()) => interface::del_in_netns(netns, interface_name).await,
-            Err(_) => Ok(()),
+            Err(GetResults::NotFound) => Ok(()),
+            _ => interface::del_in_netns(netns, interface_name).await,
         }
     } else {
         info!("No action is taken for PLUTO_VERB {}", trigger);

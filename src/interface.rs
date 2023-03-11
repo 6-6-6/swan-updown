@@ -82,21 +82,28 @@ pub async fn move_to_netns(interface: String, netns_name: &str) -> Result<(), ()
 pub async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
     // log
     let handle = misc::netlink_handle().map_err(|_| GetResults::NoHandle)?;
-    let mut links = handle.link().get().match_name(name).execute();
+    let mut links = handle.link().get().match_name(name.clone()).execute();
     //
     if let Some(link) = links.try_next().await.map_err(|_| GetResults::NotFound)? {
-        while let Some(Nla::Info(infos)) = link.nlas.first() {
+        let mut nlas = link.nlas.iter();
+        while let Some(Nla::Info(infos)) = nlas.next() {
             for info in infos {
                 match info {
                     Info::Kind(InfoKind::Xfrm) => continue,
                     Info::Kind(InfoKind::Other(desc)) => {
                         if desc.ne("xfrm") {
+                            info!("get interface {}, but it is a {:?} device", name, desc);
                             return Err(GetResults::TypeNotMatch);
                         }
+                    }
+                    Info::Kind(kind) => {
+                        info!("get interface {}, but it is a {:?} device", name, kind);
+                        return Err(GetResults::TypeNotMatch);
                     }
                     Info::Data(InfoData::Xfrm(info_data)) => {
                         while let Some(InfoXfrmTun::IfId(if_id)) = info_data.iter().next() {
                             if expected_if_id.ne(if_id) {
+                                info!("get interface {}, but if_id {} was not the expected value ({})", name, if_id, expected_if_id);
                                 return Err(GetResults::IfIdNotMatch);
                             }
                         }
@@ -106,6 +113,7 @@ pub async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
             }
         }
     }
+    info!("get interface {}, everything is ok", name);
     Ok(())
 }
 
