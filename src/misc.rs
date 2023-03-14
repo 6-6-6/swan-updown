@@ -8,7 +8,7 @@ pub fn find_env(key: &str) -> Result<String, ()> {
         Ok(value) => {
             info!("Environment variable {} found: {}", key, value);
             Ok(value)
-        },
+        }
         Err(e) => {
             error!("Environment variable {} not found: {}, exiting...", key, e);
             Err(())

@@ -28,7 +28,7 @@ pub async fn new_xfrm(interface: String, if_id: u32) -> Result<(), ()> {
     let mut add_device_msg = add_device_req.message_mut();
     // header
     add_device_msg.header.link_layer_type = rtnl::ARPHRD_NONE;
-    add_device_msg.header.flags = rtnl::IFF_UP | rtnl::IFF_MULTICAST;
+    add_device_msg.header.flags = rtnl::IFF_UP | rtnl::IFF_MULTICAST | rtnl::IFF_NOARP;
     // set its name
     let if_name = Nla::IfName(interface.clone());
     add_device_msg.nlas.push(if_name);

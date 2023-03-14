@@ -1,3 +1,9 @@
+swan-updown (0.2.3) stable; urgency=low
+
+  * remove babeld support, add NO_ARP on XFRM creation
+
+ -- Zhang Zongyu <zongyu@novazy.net>  Tue, 14 Mar 2023 10:35:30 +0000
+
 swan-updown (0.2.2) stable; urgency=low
 
   * reduce meaningless logs
