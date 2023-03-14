@@ -16,15 +16,11 @@ in `swanctl.conf`
 
 For its arguments, see `swan-updown -h`.
 
-### modules
+### what it will do
 #### interface
-It [creates / destroys] XFRM interface when an SA is [established / deleted].
+It will [create / destroy] XFRM interface when an SA is [established / deleted].
 
-The name of the interface is based on the `--prefix` argument and the `PLUTO_IF_ID_IN` environment variable.
+The name of the interface will be based on the `--prefix` argument and the `PLUTO_IF_ID_IN` environment variable.
 
 Additionally, if `--netns` is specified, the interface will be moved into the given netns.
 
-#### babeld
-It makes babeld daemon [operate / stop operating] on the interface mentioned above.
-
-To make it work, specify the path of the babeld socket with `--babeld-ctl`.
