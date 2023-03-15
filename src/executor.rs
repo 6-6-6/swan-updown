@@ -7,17 +7,18 @@ pub async fn interface_updown(
     netns: Option<String>,
     interface_name: String,
     conn_if_id: u32,
+    alt_names: Vec<String>
 ) -> Result<(), ()> {
     // process by PLUTO_VERB
     if trigger.starts_with("up-client") {
         match interface::get_in_netns(netns.clone(), interface_name.clone(), conn_if_id).await {
             Ok(()) => Ok(()),
             Err(GetResults::NotFound) => {
-                interface::add_to_netns(netns, interface_name, conn_if_id).await
+                interface::add_to_netns(netns, interface_name, conn_if_id, alt_names).await
             }
             Err(_) => {
                 interface::del_in_netns(netns.clone(), interface_name.clone()).await?;
-                interface::add_to_netns(netns, interface_name, conn_if_id).await
+                interface::add_to_netns(netns, interface_name, conn_if_id, alt_names).await
             }
         }
     } else if trigger.starts_with("down-client") {

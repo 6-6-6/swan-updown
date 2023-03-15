@@ -20,7 +20,7 @@ pub enum GetResults {
 }
 
 // waiting for new rtnetlink release
-pub async fn new_xfrm(interface: String, if_id: u32) -> Result<(), ()> {
+pub async fn new_xfrm(interface: String, if_id: u32, alt_names: Vec<String>) -> Result<(), ()> {
     info!("adding new xfrm interface {}, if_id {}", interface, if_id);
 
     let handle = misc::netlink_handle()?;
@@ -32,6 +32,10 @@ pub async fn new_xfrm(interface: String, if_id: u32) -> Result<(), ()> {
     // set its name
     let if_name = Nla::IfName(interface.clone());
     add_device_msg.nlas.push(if_name);
+    for alt_name in alt_names.into_iter() {
+        let if_alt_name = Nla::AltIfName(alt_name);
+        add_device_msg.nlas.push(if_alt_name);
+    }
     // set the necessary info for adding a xfrm iface
     let xfrm_parent = InfoXfrmTun::Link(1);
     let xfrm_ifid = InfoXfrmTun::IfId(if_id);
@@ -123,11 +127,12 @@ pub async fn add_to_netns(
     netns_name: Option<String>,
     interface: String,
     if_id: u32,
+    alt_names: Vec<String>
 ) -> Result<(), ()> {
     match netns_name {
-        None => new_xfrm(interface, if_id).await,
+        None => new_xfrm(interface, if_id, alt_names).await,
         Some(my_netns_name) => {
-            new_xfrm(interface.clone(), if_id).await?;
+            new_xfrm(interface.clone(), if_id, alt_names).await?;
             move_to_netns(interface, &my_netns_name).await
         }
     }
