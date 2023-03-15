@@ -20,8 +20,11 @@ pub enum GetResults {
 }
 
 // waiting for new rtnetlink release
-pub async fn new_xfrm(interface: String, if_id: u32, alt_names: Vec<String>) -> Result<(), ()> {
-    info!("adding new xfrm interface {}, if_id {}", interface, if_id);
+pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Result<(), ()> {
+    info!(
+        "adding new xfrm interface {}, if_id {}, altname {:#?}",
+        interface, if_id, alt_names
+    );
 
     let handle = misc::netlink_handle()?;
     let mut add_device_req = handle.link().add();
@@ -30,12 +33,7 @@ pub async fn new_xfrm(interface: String, if_id: u32, alt_names: Vec<String>) -> 
     add_device_msg.header.link_layer_type = rtnl::ARPHRD_NONE;
     add_device_msg.header.flags = rtnl::IFF_UP | rtnl::IFF_MULTICAST | rtnl::IFF_NOARP;
     // set its name
-    let if_name = Nla::IfName(interface.clone());
-    add_device_msg.nlas.push(if_name);
-    for alt_name in alt_names.into_iter() {
-        let if_alt_name = Nla::AltIfName(alt_name);
-        add_device_msg.nlas.push(if_alt_name);
-    }
+    add_device_msg.nlas.push(Nla::IfName(interface.clone()));
     // set the necessary info for adding a xfrm iface
     let xfrm_parent = InfoXfrmTun::Link(1);
     let xfrm_ifid = InfoXfrmTun::IfId(if_id);
@@ -46,7 +44,15 @@ pub async fn new_xfrm(interface: String, if_id: u32, alt_names: Vec<String>) -> 
     add_device_req
         .execute()
         .await
-        .map_err(|e| error!("Failed to add a XFRM interface {}: {}", interface, e))
+        .map_err(|e| error!("Failed to add a XFRM interface {}: {}", interface, e))?;
+
+    let mut add_prop_req = handle.link().property_add(0).alt_ifname(alt_names);
+    let add_prop_msg = add_prop_req.message_mut();
+    add_prop_msg.nlas.push(Nla::IfName(interface.clone()));
+    add_prop_req
+        .execute()
+        .await
+        .map_err(|e| error!("Failed to add altname for {}: {}", interface, e))
 }
 
 // wrapper to delete an interface by its name
@@ -127,7 +133,7 @@ pub async fn add_to_netns(
     netns_name: Option<String>,
     interface: String,
     if_id: u32,
-    alt_names: Vec<String>
+    alt_names: &[&str],
 ) -> Result<(), ()> {
     match netns_name {
         None => new_xfrm(interface, if_id, alt_names).await,

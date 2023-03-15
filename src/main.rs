@@ -76,7 +76,12 @@ async fn main() -> Result<(), ()> {
         .parse::<u32>()
         .map_err(|e| error! {"parse if_id failed: {}", e})?;
     let interface_name = synthesize(&if_prefix, conn_if_id);
-    let id_pair = format!("Me:{}<->Peer:{}", misc::find_env("PLUTO_MY_ID")?, misc::find_env("PLUTO_PEER_ID")?);
+    let id_pair = format!(
+        "Me: {} <-> Peer: {}",
+        misc::find_env("PLUTO_MY_ID")?,
+        misc::find_env("PLUTO_PEER_ID")?
+    );
+    let alt_names: Vec<&str> = vec![&id_pair];
 
     // for future use
     let mut tasks = Vec::new();
@@ -86,7 +91,7 @@ async fn main() -> Result<(), ()> {
             args.netns.clone(),
             interface_name.clone(),
             conn_if_id,
-            vec![id_pair],
+            &alt_names,
         )
         .boxed(),
     );

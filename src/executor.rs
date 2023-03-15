@@ -7,7 +7,7 @@ pub async fn interface_updown(
     netns: Option<String>,
     interface_name: String,
     conn_if_id: u32,
-    alt_names: Vec<String>
+    alt_names: &[&str],
 ) -> Result<(), ()> {
     // process by PLUTO_VERB
     if trigger.starts_with("up-client") {
