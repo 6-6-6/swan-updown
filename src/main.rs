@@ -81,7 +81,14 @@ async fn main() -> Result<(), ()> {
         misc::find_env("PLUTO_MY_ID")?,
         misc::find_env("PLUTO_PEER_ID")?
     );
-    let alt_names: Vec<&str> = vec![&id_pair];
+    let ip_pair = format!(
+        "Me: {}:{} <-> Peer: {}:{}",
+        misc::find_env("PLUTO_ME")?,
+        misc::find_env("PLUTO_MY_PORT")?,
+        misc::find_env("PLUTO_PEER")?,
+        misc::find_env("PLUTO_PEER_PORT")?,
+    );
+    let alt_names: Vec<&str> = vec![&id_pair, &ip_pair];
 
     // for future use
     let mut tasks = Vec::new();
