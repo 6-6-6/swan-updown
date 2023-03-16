@@ -1,7 +1,7 @@
 use crate::misc;
 use crate::netns;
 use futures::TryStreamExt;
-use log::{error, info};
+use log::{error, info, warn};
 use netlink_packet_route::rtnl;
 use netlink_packet_route::rtnl::link::nlas::Info;
 use netlink_packet_route::rtnl::link::nlas::InfoData;
@@ -49,10 +49,10 @@ pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Resu
     let mut add_prop_req = handle.link().property_add(0).alt_ifname(alt_names);
     let add_prop_msg = add_prop_req.message_mut();
     add_prop_msg.nlas.push(Nla::IfName(interface.clone()));
-    add_prop_req
-        .execute()
-        .await
-        .map_err(|e| error!("Failed to add altname for {}: {}", interface, e))
+    add_prop_req.execute().await.map_or_else(
+        |e| Ok(warn!("Failed to add altname for {}: {}", interface, e)),
+        |_| Ok(()),
+    )
 }
 
 // wrapper to delete an interface by its name
