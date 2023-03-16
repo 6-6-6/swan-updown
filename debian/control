@@ -3,7 +3,7 @@ Section: net
 Priority: optional
 Maintainer: Zhang Zongyu <zongyu@novazy.net>
 Uploaders: Zhang Zongyu <zongyu@novazy.net>
-Standards-Version: 0.2.4-r1
+Standards-Version: 0.2.4-r2
 Vcs-Browser: https://www.github.com/6-6-6/swan-updown
 Vcs-Git: https://www.github.com/6-6-6/swan-updown
 Homepage: https://www.github.com/6-6-6/swan-updown

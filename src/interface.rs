@@ -49,6 +49,7 @@ pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Resu
     let mut add_prop_req = handle.link().property_add(0).alt_ifname(alt_names);
     let add_prop_msg = add_prop_req.message_mut();
     add_prop_msg.nlas.push(Nla::IfName(interface.clone()));
+    #[allow(clippy::unit_arg)]
     add_prop_req.execute().await.map_or_else(
         |e| Ok(warn!("Failed to add altname for {}: {}", interface, e)),
         |_| Ok(()),

@@ -82,11 +82,9 @@ async fn main() -> Result<(), ()> {
         misc::find_env("PLUTO_PEER_ID")?
     );
     let ip_pair = format!(
-        "Me: {}:{} <-> Peer: {}:{}",
+        "Me: {} <-> Peer: {}",
         misc::find_env("PLUTO_ME")?,
-        misc::find_env("PLUTO_MY_PORT")?,
         misc::find_env("PLUTO_PEER")?,
-        misc::find_env("PLUTO_PEER_PORT")?,
     );
     let alt_names: Vec<&str> = vec![&id_pair, &ip_pair];
 
