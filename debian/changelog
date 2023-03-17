@@ -1,4 +1,4 @@
-swan-updown (0.2.4) stable; urgency=low
+swan-updown (0.2.5) stable; urgency=low
 
   * add alt_name on creation
 
