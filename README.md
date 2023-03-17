@@ -20,7 +20,12 @@ For its arguments, see `swan-updown -h`.
 #### interface
 It will [create / destroy] XFRM interface when an SA is [established / deleted].
 
-The name of the interface will be based on the `--prefix` argument and the `PLUTO_IF_ID_IN` environment variable.
+The name of the interface will be `{prefix}{hex encoded if_id}`.
+The `prefix` can be specified by `--prefix` argument and the `if_id` is the `PLUTO_IF_ID_IN` environment variable.
 
-Additionally, if `--netns` is specified, the interface will be moved into the given netns.
+`swan-updown` also adds altnames to the interface. The altnames will show
+- the local and remote IKEIDs pair
+- the local and remote IP addresses pair
+
+Additionally, if `--netns` is specified, the created interface will be moved into the given netns.
 
