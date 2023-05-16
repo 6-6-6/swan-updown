@@ -1,7 +1,7 @@
 .PHONY: build clean install
 
 build:
-	/usr/local/bin/cargo build --release
+	cargo build --release
 
 install:
 	mkdir "${DESTDIR}/${prefix}/bin/" -p
