@@ -37,8 +37,8 @@ fn into_netns(name: &str) -> Result<(), ()> {
     info!("switching to netns {}", name);
     let mut setns_flags = CloneFlags::empty();
     // unshare to the new network namespace
-    nix::sched::unshare(CloneFlags::CLONE_NEWNET).map_err(|e| error!("Unshare error: {e}"))?;
+    nix::sched::unshare(CloneFlags::CLONE_NEWNET).map_err(|e| error!("Unshare error: {}", e))?;
     // set netns
     setns_flags.insert(CloneFlags::CLONE_NEWNET);
-    nix::sched::setns(netns_fd.as_raw_fd(), setns_flags).map_err(|e| error!("Setns error: {e}"))
+    nix::sched::setns(netns_fd.as_raw_fd(), setns_flags).map_err(|e| error!("Setns error: {}", e))
 }
