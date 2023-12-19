@@ -2,12 +2,16 @@ use crate::misc;
 use crate::netns;
 use futures::TryStreamExt;
 use log::{error, info, warn};
-use netlink_packet_route::rtnl;
-use netlink_packet_route::rtnl::link::nlas::Info;
-use netlink_packet_route::rtnl::link::nlas::InfoData;
-use netlink_packet_route::rtnl::link::nlas::InfoKind;
-use netlink_packet_route::rtnl::link::nlas::InfoXfrmTun;
-use netlink_packet_route::rtnl::link::nlas::Nla;
+// for creating a link
+use netlink_packet_route::link::LinkAttribute;
+use netlink_packet_route::link::LinkFlag;
+use netlink_packet_route::link::LinkLayerType;
+// for get a link info
+use netlink_packet_route::link::InfoData;
+use netlink_packet_route::link::InfoKind;
+use netlink_packet_route::link::InfoXfrm;
+use netlink_packet_route::link::LinkInfo;
+//use netlink_packet_route::link::Nla;
 use std::os::unix::prelude::AsRawFd;
 
 #[derive(Debug)]
@@ -27,29 +31,27 @@ pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Resu
     );
 
     let handle = misc::netlink_handle()?;
-    let mut add_device_req = handle.link().add();
+    let mut add_device_req = handle.link().add().xfrmtun(interface.clone(), if_id);
     let add_device_msg = add_device_req.message_mut();
-    // header
-    add_device_msg.header.link_layer_type = rtnl::ARPHRD_NONE;
-    add_device_msg.header.flags = rtnl::IFF_UP | rtnl::IFF_MULTICAST | rtnl::IFF_NOARP;
-    // set its name
-    add_device_msg.nlas.push(Nla::IfName(interface.clone()));
+    // headers
+    add_device_msg.header.link_layer_type = LinkLayerType::None; //rtnl::ARPHRD_NONE;
+    add_device_msg.header.flags.push(LinkFlag::Up);
+    add_device_msg.header.flags.push(LinkFlag::Multicast);
+    add_device_msg.header.flags.push(LinkFlag::Noarp);
     // set the necessary info for adding a xfrm iface
-    let xfrm_parent = InfoXfrmTun::Link(1);
-    let xfrm_ifid = InfoXfrmTun::IfId(if_id);
-    let xfrm_meta = Info::Data(InfoData::Xfrm(vec![xfrm_parent, xfrm_ifid]));
-    let if_info = Nla::Info(vec![Info::Kind(InfoKind::Xfrm), xfrm_meta]);
-    add_device_msg.nlas.push(if_info);
-    // exec
     add_device_req
         .execute()
         .await
         .map_err(|e| error!("Failed to add a XFRM interface {}: {}", interface, e))?;
 
+    // add the altname of the interface
     let mut add_prop_req = handle.link().property_add(0).alt_ifname(alt_names);
     let add_prop_msg = add_prop_req.message_mut();
-    add_prop_msg.nlas.push(Nla::IfName(interface.clone()));
+    add_prop_msg
+        .attributes
+        .push(LinkAttribute::IfName(interface.clone()));
     #[allow(clippy::unit_arg)]
+    // even if it failes, everything will be okay, so no error here
     add_prop_req.execute().await.map_or_else(
         |e| Ok(warn!("Failed to add altname for {}: {}", interface, e)),
         |_| Ok(()),
@@ -63,8 +65,10 @@ pub async fn del(interface: String) -> Result<(), ()> {
     let handle = misc::netlink_handle()?;
     let mut del_req = handle.link().del(0);
 
-    let if_name = Nla::IfName(interface.clone());
-    del_req.message_mut().nlas.push(if_name);
+    del_req
+        .message_mut()
+        .attributes
+        .push(LinkAttribute::IfName(interface.clone()));
 
     del_req
         .execute()
@@ -101,24 +105,24 @@ pub async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
     let mut links = handle.link().get().match_name(name.clone()).execute();
     //
     if let Some(link) = links.try_next().await.map_err(|_| GetResults::NotFound)? {
-        let mut nlas = link.nlas.iter();
-        while let Some(Nla::Info(infos)) = nlas.next() {
+        let mut attrs = link.attributes.iter();
+        while let Some(LinkAttribute::LinkInfo(infos)) = attrs.next() {
             for info in infos {
                 match info {
-                    Info::Kind(InfoKind::Xfrm) => continue,
-                    Info::Kind(InfoKind::Other(desc)) => {
+                    LinkInfo::Kind(InfoKind::Xfrm) => continue,
+                    LinkInfo::Kind(InfoKind::Other(desc)) => {
                         if desc.ne("xfrm") {
                             info!("get interface {}, but it is a {:?} device", name, desc);
                             return Err(GetResults::TypeNotMatch);
                         }
                     }
-                    Info::Kind(kind) => {
+                    LinkInfo::Kind(kind) => {
                         info!("get interface {}, but it is a {:?} device", name, kind);
                         return Err(GetResults::TypeNotMatch);
                     }
-                    Info::Data(InfoData::Xfrm(info_data)) => {
+                    LinkInfo::Data(InfoData::Xfrm(info_data)) => {
                         let mut info_data_iter = info_data.iter();
-                        while let Some(InfoXfrmTun::IfId(if_id)) = info_data_iter.next() {
+                        while let Some(InfoXfrm::IfId(if_id)) = info_data_iter.next() {
                             if expected_if_id.ne(if_id) {
                                 info!("get interface {}, but if_id {} was not the expected value ({})", name, if_id, expected_if_id);
                                 return Err(GetResults::IfIdNotMatch);
