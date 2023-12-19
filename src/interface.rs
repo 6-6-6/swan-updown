@@ -19,7 +19,7 @@ pub enum GetResults {
     NoHandle,
 }
 
-// waiting for new rtnetlink release
+// Add a new xfrm interface
 pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Result<(), ()> {
     info!(
         "adding new xfrm interface {}, if_id {}, altname {:#?}",
@@ -28,7 +28,7 @@ pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Resu
 
     let handle = misc::netlink_handle()?;
     let mut add_device_req = handle.link().add();
-    let mut add_device_msg = add_device_req.message_mut();
+    let add_device_msg = add_device_req.message_mut();
     // header
     add_device_msg.header.link_layer_type = rtnl::ARPHRD_NONE;
     add_device_msg.header.flags = rtnl::IFF_UP | rtnl::IFF_MULTICAST | rtnl::IFF_NOARP;
@@ -79,7 +79,7 @@ pub async fn move_to_netns(interface: String, netns_name: &str) -> Result<(), ()
     let handle = misc::netlink_handle()?;
     let netns_file = netns::get_netns_by_name(netns_name)?;
 
-    handle
+    if let Err(()) = handle
         .link()
         .set(0)
         .name(interface.clone())
@@ -88,6 +88,11 @@ pub async fn move_to_netns(interface: String, netns_name: &str) -> Result<(), ()
         .execute()
         .await
         .map_err(|e| error!("Failed to move {} to netns: {}", interface, e))
+    {
+        del(interface).await
+    } else {
+        Ok(())
+    }
 }
 
 pub async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
