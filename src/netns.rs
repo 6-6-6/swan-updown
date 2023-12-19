@@ -3,7 +3,7 @@ use log::{error, info};
 use nix::sched::CloneFlags;
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::AsFd;
 use std::path::Path;
 use tokio::task::JoinError;
 
@@ -40,5 +40,5 @@ fn into_netns(name: &str) -> Result<(), ()> {
     nix::sched::unshare(CloneFlags::CLONE_NEWNET).map_err(|e| error!("Unshare error: {}", e))?;
     // set netns
     setns_flags.insert(CloneFlags::CLONE_NEWNET);
-    nix::sched::setns(netns_fd.as_raw_fd(), setns_flags).map_err(|e| error!("Setns error: {}", e))
+    nix::sched::setns(netns_fd.as_fd(), setns_flags).map_err(|e| error!("Setns error: {}", e))
 }
