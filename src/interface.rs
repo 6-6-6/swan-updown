@@ -91,7 +91,12 @@ pub async fn move_to_netns(interface: String, netns_name: &str) -> Result<(), ()
         .up()
         .execute()
         .await
-        .map_err(|e| error!("Failed to move {} to netns: {}", interface, e))
+        .map_err(|e| {
+            error!(
+                "Failed to move {} to netns: {} [Deleting it as a temporary solution...]",
+                interface, e
+            )
+        })
     {
         del(interface).await
     } else {
