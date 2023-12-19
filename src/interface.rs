@@ -38,6 +38,9 @@ pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Resu
     add_device_msg.header.flags.push(LinkFlag::Up);
     add_device_msg.header.flags.push(LinkFlag::Multicast);
     add_device_msg.header.flags.push(LinkFlag::Noarp);
+    add_device_msg.header.change_mask.push(LinkFlag::Up);
+    add_device_msg.header.change_mask.push(LinkFlag::Multicast);
+    add_device_msg.header.change_mask.push(LinkFlag::Noarp);
     // set the necessary info for adding a xfrm iface
     add_device_req
         .execute()

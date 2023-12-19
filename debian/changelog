@@ -1,3 +1,9 @@
+swan-updown (0.2.7) stable; urgency=low
+
+  * enable multicast on xrfm creation
+
+ -- Zhang Zongyu <zongyu@novazy.net>  Tue, 19 Dec 2023 17:30:30 +0000
+
 swan-updown (0.2.6) stable; urgency=low
 
   * delete interface if it cannot be moved into target netns
