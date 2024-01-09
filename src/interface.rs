@@ -1,7 +1,7 @@
 use crate::misc;
 use crate::netns;
 use futures::TryStreamExt;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 // for creating a link
 use netlink_packet_route::link::LinkAttribute;
 use netlink_packet_route::link::LinkFlag;
@@ -11,6 +11,7 @@ use netlink_packet_route::link::InfoData;
 use netlink_packet_route::link::InfoKind;
 use netlink_packet_route::link::InfoXfrm;
 use netlink_packet_route::link::LinkInfo;
+use netlink_packet_route::link::State;
 //use netlink_packet_route::link::Nla;
 use std::os::unix::prelude::AsRawFd;
 
@@ -18,6 +19,7 @@ use std::os::unix::prelude::AsRawFd;
 pub enum GetResults {
     TypeNotMatch,
     IfIdNotMatch,
+    IfOperStateNotMatch,
     NotFound,
     TokioJoinError,
     NoHandle,
@@ -35,10 +37,8 @@ pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Resu
     let add_device_msg = add_device_req.message_mut();
     // headers
     add_device_msg.header.link_layer_type = LinkLayerType::None; //rtnl::ARPHRD_NONE;
-    add_device_msg.header.flags.push(LinkFlag::Up);
     add_device_msg.header.flags.push(LinkFlag::Multicast);
     add_device_msg.header.flags.push(LinkFlag::Noarp);
-    add_device_msg.header.change_mask.push(LinkFlag::Up);
     add_device_msg.header.change_mask.push(LinkFlag::Multicast);
     add_device_msg.header.change_mask.push(LinkFlag::Noarp);
     // set the necessary info for adding a xfrm iface
@@ -55,10 +55,28 @@ pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Resu
         .push(LinkAttribute::IfName(interface.clone()));
     #[allow(clippy::unit_arg)]
     // even if it failes, everything will be okay, so no error here
-    add_prop_req.execute().await.map_or_else(
-        |e| Ok(warn!("Failed to add altname for {}: {}", interface, e)),
-        |_| Ok(()),
-    )
+    if let Err(e) = add_prop_req.execute().await {
+        warn!("Failed to add altname for {}: {}", interface, e)
+    }
+    // bring the interface up after creationg
+    if let Err(()) = handle
+        .link()
+        .set(0)
+        .name(interface.clone())
+        .up()
+        .execute()
+        .await
+        .map_err(|e| {
+            error!(
+                "Failed to bring interface {} up: {}, deleting it...",
+                interface, e
+            )
+        })
+    {
+        del(interface).await
+    } else {
+        Ok(())
+    }
 }
 
 // wrapper to delete an interface by its name
@@ -113,32 +131,60 @@ pub async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
     let mut links = handle.link().get().match_name(name.clone()).execute();
     //
     if let Some(link) = links.try_next().await.map_err(|_| GetResults::NotFound)? {
-        let mut attrs = link.attributes.iter();
-        while let Some(LinkAttribute::LinkInfo(infos)) = attrs.next() {
-            for info in infos {
-                match info {
-                    LinkInfo::Kind(InfoKind::Xfrm) => continue,
-                    LinkInfo::Kind(InfoKind::Other(desc)) => {
-                        if desc.ne("xfrm") {
-                            info!("get interface {}, but it is a {:?} device", name, desc);
-                            return Err(GetResults::TypeNotMatch);
-                        }
-                    }
-                    LinkInfo::Kind(kind) => {
-                        info!("get interface {}, but it is a {:?} device", name, kind);
-                        return Err(GetResults::TypeNotMatch);
-                    }
-                    LinkInfo::Data(InfoData::Xfrm(info_data)) => {
-                        let mut info_data_iter = info_data.iter();
-                        while let Some(InfoXfrm::IfId(if_id)) = info_data_iter.next() {
-                            if expected_if_id.ne(if_id) {
-                                info!("get interface {}, but if_id {} was not the expected value ({})", name, if_id, expected_if_id);
-                                return Err(GetResults::IfIdNotMatch);
+        //let mut attrs = link.attributes.iter();
+        // first of all, I need to check whether the interface is a proper xfrm interfaceå
+        for link_attr in link.attributes.iter() {
+            let mut is_xfrm = false;
+            if let LinkAttribute::LinkInfo(infos) = link_attr {
+                for info in infos {
+                    match info {
+                        LinkInfo::Kind(InfoKind::Xfrm) => is_xfrm = true,
+                        LinkInfo::Kind(InfoKind::Other(desc)) => {
+                            if desc.ne("xfrm") {
+                                info!("get interface {}, but it is a {:?} device", name, desc)
+                            } else {
+                                is_xfrm = true
                             }
                         }
+                        LinkInfo::Kind(kind) => {
+                            info!("get interface {}, but it is a {:?} device", name, kind)
+                        }
+                        LinkInfo::Data(InfoData::Xfrm(info_data)) => {
+                            let mut info_data_iter = info_data.iter();
+                            while let Some(InfoXfrm::IfId(if_id)) = info_data_iter.next() {
+                                if expected_if_id.ne(if_id) {
+                                    info!("get interface {}, but if_id {} was not the expected value ({})", name, if_id, expected_if_id);
+                                    return Err(GetResults::IfIdNotMatch);
+                                }
+                            }
+                        }
+                        _ => continue,
                     }
-                    _ => continue,
                 }
+            }
+            if !is_xfrm {
+                return Err(GetResults::TypeNotMatch);
+            };
+        }
+        // check the attrs of the interface
+        // leave it a single match, maybe we are going to match more attrs in the future
+        #[allow(clippy::single_match)]
+        for link_attr in link.attributes.iter() {
+            match link_attr {
+                // check link state
+                LinkAttribute::OperState(state) => match state {
+                    State::Up | State::Unknown => {
+                        debug!("interface {} operstate is {:?}", name, state)
+                    }
+                    _ => {
+                        info!(
+                            "get interface {}, but its state was not the expected value ({:?})",
+                            name, state
+                        );
+                        return Err(GetResults::IfOperStateNotMatch);
+                    }
+                },
+                _ => (),
             }
         }
     }
