@@ -1,3 +1,9 @@
+swan-updown (0.2.9) stable; urgency=low
+
+  * support assigning master device to the created xfrm
+
+ -- Zhang Zongyu <zongyu@novazy.net>  Mon, 15 Jan 2024 12:54:20 +0000
+
 swan-updown (0.2.8) stable; urgency=low
 
   * bring ifaces up after creation
