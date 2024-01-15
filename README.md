@@ -15,6 +15,21 @@ connections.<conn>.children.<child>.updown = swan-updown [OPTIONS]
 in `swanctl.conf`
 
 For its arguments, see `swan-updown -h`.
+```
+# swan-updown -h
+swan-updown helps create ipsec interfaces
+
+Usage: swan-updown [OPTIONS]
+
+Options:
+  -p, --prefix <prefix>  the prefix of the created interfaces, default to [swan]
+  -n, --netns <netns>    Optional network namespace to move interfaces into
+  -m, --master <master>  Optional master device to assign interfaces to
+      --to-stdout        send log to stdout, otherwise the log will be sent to syslog
+  -d, --debug...         (it only applies to syslog) set it multiple time to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
+  -h, --help             Print help
+  -V, --version          Print version
+```
 
 ### what it will do
 #### interface
