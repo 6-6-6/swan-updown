@@ -22,18 +22,24 @@ struct SwanUpdown {
     #[arg(long, value_name = "enable")]
     enable: Vec<String>,
      */
-    /// needed by [all],        the prefix of the created interfaces, default to [swan]
+    // needed by [all],
+    /// the prefix of the created interfaces, default to [swan]
     #[arg(short, long, value_name = "prefix")]
     prefix: Option<String>,
-    /// needed by [interface],  Optional network namespace to move interfaces into
+    // needed by [interface],
+    ///Optional network namespace to move interfaces into
     #[arg(short, long, value_name = "netns")]
     netns: Option<String>,
+    // needed by [interface],
+    /// Optional master device to assign interfaces to
+    #[arg(short, long, value_name = "master")]
+    master: Option<String>,
 
     // for debug
     /// send log to stdout, otherwise the log will be sent to syslog
     #[arg(long, action = clap::ArgAction::SetTrue)]
     to_stdout: bool,
-    /// set it multiple time to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
+    /// (it only applies to syslog) set it multiple time to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
     #[arg(short, long, action = clap::ArgAction::Count)]
     debug: u8,
 }
@@ -97,6 +103,7 @@ async fn main() -> Result<(), ()> {
             interface_name.clone(),
             conn_if_id,
             &alt_names,
+            args.master,
         )
         .boxed(),
     );

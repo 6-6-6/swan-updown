@@ -26,13 +26,18 @@ pub enum GetResults {
 }
 
 // Add a new xfrm interface
-pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Result<(), ()> {
+pub async fn new_xfrm(
+    interface: String,
+    if_id: u32,
+    alt_names: &[&str],
+    master_dev: Option<String>,
+) -> Result<(), ()> {
     info!(
         "adding new xfrm interface {}, if_id {}, altname {:#?}",
         interface, if_id, alt_names
     );
 
-    let handle = misc::netlink_handle()?;
+    let mut handle = misc::netlink_handle()?;
     let mut add_device_req = handle.link().add().xfrmtun(interface.clone(), if_id);
     let add_device_msg = add_device_req.message_mut();
     // headers
@@ -54,16 +59,21 @@ pub async fn new_xfrm(interface: String, if_id: u32, alt_names: &[&str]) -> Resu
         .attributes
         .push(LinkAttribute::IfName(interface.clone()));
     #[allow(clippy::unit_arg)]
-    // even if it failes, everything will be okay, so no error here
+    // even if it fails, everything will be okay, so no error here
     if let Err(e) = add_prop_req.execute().await {
         warn!("Failed to add altname for {}: {}", interface, e)
     }
-    // bring the interface up after creationg
+    // get the idx of the master device
+    let master_devidx = misc::get_index_by_name(&mut handle, master_dev)
+        .await
+        .map_err(|_| ())?;
+    // bring the interface up after creation
     if let Err(()) = handle
         .link()
         .set(0)
         .name(interface.clone())
         .up()
+        .controller(master_devidx)
         .execute()
         .await
         .map_err(|e| {
@@ -198,11 +208,12 @@ pub async fn add_to_netns(
     interface: String,
     if_id: u32,
     alt_names: &[&str],
+    master_dev: Option<String>,
 ) -> Result<(), ()> {
     match netns_name {
-        None => new_xfrm(interface, if_id, alt_names).await,
+        None => new_xfrm(interface, if_id, alt_names, master_dev).await,
         Some(my_netns_name) => {
-            new_xfrm(interface.clone(), if_id, alt_names).await?;
+            new_xfrm(interface.clone(), if_id, alt_names, master_dev).await?;
             move_to_netns(interface, &my_netns_name).await
         }
     }
