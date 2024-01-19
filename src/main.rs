@@ -56,9 +56,16 @@ async fn main() -> Result<(), ()> {
         _ => LevelFilter::Debug,
     };
 
+    fn init_env_logger() {
+        env_logger::Builder::from_env(
+            env_logger::Env::default().default_filter_or("swan-updown=warn"),
+        )
+        .init();
+    }
+
     if args.to_stdout {
         // use stdout
-        env_logger::init();
+        init_env_logger();
     } else {
         // use syslog
         let formatter = Formatter3164 {
@@ -67,12 +74,19 @@ async fn main() -> Result<(), ()> {
             process: MYSELF.into(),
             pid: 42,
         };
-        let logger =
-            syslog::unix(formatter).map_err(|e| error!("failed to create logger: {}", e))?;
-        match log::set_boxed_logger(Box::new(BasicLogger::new(logger))) {
-            Ok(_) => log::set_max_level(my_loglevel),
-            Err(_) => return Err(()),
-        };
+        match syslog::unix(formatter) {
+            Ok(logger) => {
+                match log::set_boxed_logger(Box::new(BasicLogger::new(logger))) {
+                    Ok(_) => log::set_max_level(my_loglevel),
+                    Err(_) => return Err(()),
+                };
+            }
+            // fallback to stdout if syslog goes wrong
+            Err(e) => {
+                println!("failed to create logger, swtich to env_logger: {}", e);
+                init_env_logger();
+            }
+        }
     }
 
     let if_prefix = args.prefix.unwrap_or_else(|| "swan".into());
