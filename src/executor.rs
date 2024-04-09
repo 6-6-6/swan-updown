@@ -1,6 +1,8 @@
+use log::info;
+use eyre::Error;
+
 use crate::interface;
 use crate::interface::GetResults;
-use log::info;
 
 pub async fn interface_updown(
     trigger: &str,
@@ -9,7 +11,7 @@ pub async fn interface_updown(
     conn_if_id: u32,
     alt_names: &[&str],
     master_dev: Option<String>,
-) -> Result<(), ()> {
+) -> Result<(), Error> {
     // process by PLUTO_VERB
     if trigger.starts_with("up-client") {
         match interface::get_in_netns(netns.clone(), interface_name.clone(), conn_if_id).await {

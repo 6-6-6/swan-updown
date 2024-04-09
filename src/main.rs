@@ -1,11 +1,12 @@
-use clap::Parser;
-use futures::future::{join_all, FutureExt};
-use log::LevelFilter;
-use log::{error, info};
-use misc::synthesize;
 use std::time::Duration;
+
+use clap::Parser;
+use log::LevelFilter;
+use log::info;
+use misc::synthesize;
 use syslog::{BasicLogger, Facility, Formatter3164};
 use tokio::time::timeout;
+use eyre::{Error, WrapErr};
 
 mod executor;
 mod interface;
@@ -45,7 +46,7 @@ struct SwanUpdown {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), ()> {
+async fn main() -> Result<(), Error> {
     let args = SwanUpdown::parse();
 
     // debug level
@@ -76,10 +77,8 @@ async fn main() -> Result<(), ()> {
         };
         match syslog::unix(formatter) {
             Ok(logger) => {
-                match log::set_boxed_logger(Box::new(BasicLogger::new(logger))) {
-                    Ok(_) => log::set_max_level(my_loglevel),
-                    Err(_) => return Err(()),
-                };
+                log::set_boxed_logger(Box::new(BasicLogger::new(logger)))?;
+                log::set_max_level(my_loglevel);
             }
             // fallback to stdout if syslog goes wrong
             Err(e) => {
@@ -94,7 +93,7 @@ async fn main() -> Result<(), ()> {
     // TODO: what if IF_ID_IN and IF_ID_OUT are different?
     let conn_if_id: u32 = misc::find_env("PLUTO_IF_ID_IN")?
         .parse::<u32>()
-        .map_err(|e| error! {"parse if_id failed: {}", e})?;
+        .wrap_err("parse if_id failed")?;
     let interface_name = synthesize(&if_prefix, conn_if_id);
     let id_pair = format!(
         "Me: {} <-> Peer: {}",
@@ -108,28 +107,19 @@ async fn main() -> Result<(), ()> {
     );
     let alt_names: Vec<&str> = vec![&id_pair, &ip_pair];
 
-    // for future use
-    let mut tasks = Vec::new();
-    tasks.push(
-        executor::interface_updown(
-            &trigger,
-            args.netns.clone(),
-            interface_name.clone(),
-            conn_if_id,
-            &alt_names,
-            args.master,
-        )
-        .boxed(),
+    let task = executor::interface_updown(
+        &trigger,
+        args.netns.clone(),
+        interface_name.clone(),
+        conn_if_id,
+        &alt_names,
+        args.master,
     );
     info!("enabling module interface");
 
-    for result in timeout(Duration::from_secs(60), join_all(tasks))
-        .await
-        .map_err(|e| error!("It takes too long to complete: {}", e))?
-        .into_iter()
-    {
-        result?
-    }
+    timeout(Duration::from_secs(60), task)
+      .await
+      .wrap_err("It takes too long to complete")??;
 
     Ok(())
 }

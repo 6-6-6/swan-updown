@@ -23,6 +23,7 @@ hex = { version = "0.4.3" }
 syslog = "6.1.0"
 env_logger = { version = "0.10.1", default-features = false }
 log = { version = "0.4.20", features = ["release_max_level_debug"] }
+eyre = "0.6.12"
 
 [profile.release]
 lto = true
