@@ -25,6 +25,4 @@ env_logger = { version = "0.10.1", default-features = false }
 log = { version = "0.4.20", features = ["release_max_level_debug"] }
 
 [profile.release]
-strip = true
 lto = true
-panic = "abort"
