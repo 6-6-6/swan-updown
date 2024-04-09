@@ -29,7 +29,7 @@ pub enum GetResults {
 }
 
 // Add a new xfrm interface
-pub async fn new_xfrm(
+async fn new_xfrm(
     interface: String,
     if_id: u32,
     alt_names: &[&str],
@@ -90,7 +90,7 @@ pub async fn new_xfrm(
 }
 
 // wrapper to delete an interface by its name
-pub async fn del(interface: String) -> Result<(), Error> {
+async fn del(interface: String) -> Result<(), Error> {
     info!("deleting interface {}", interface);
 
     let handle = misc::netlink_handle()?;
@@ -108,7 +108,7 @@ pub async fn del(interface: String) -> Result<(), Error> {
 }
 
 // move an interface to the given netns
-pub async fn move_to_netns(interface: String, netns_name: &str) -> Result<(), Error> {
+async fn move_to_netns(interface: String, netns_name: &str) -> Result<(), Error> {
     info!("moving interface {} to netns {}", interface, netns_name);
 
     let handle = misc::netlink_handle()?;
@@ -132,7 +132,7 @@ pub async fn move_to_netns(interface: String, netns_name: &str) -> Result<(), Er
     Ok(())
 }
 
-pub async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
+async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
     // log
     let handle = misc::netlink_handle().map_err(|_| GetResults::NoHandle)?;
     let mut links = handle.link().get().match_name(name.clone()).execute();

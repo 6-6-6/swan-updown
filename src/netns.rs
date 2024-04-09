@@ -33,7 +33,7 @@ where
 }
 
 // after calling this function, the process will move into the given network namespace
-fn into_netns(name: &str) -> Result<(), Error> {
+pub fn into_netns(name: &str) -> Result<(), Error> {
     let netns_fd = get_netns_by_name(name)?;
     info!("switching to netns {}", name);
     let mut setns_flags = CloneFlags::empty();
