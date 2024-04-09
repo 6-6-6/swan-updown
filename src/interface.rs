@@ -108,27 +108,21 @@ async fn del(interface: String) -> Result<(), Error> {
 }
 
 // move an interface to the given netns
-async fn move_to_netns(interface: String, netns_name: &str) -> Result<(), Error> {
+async fn move_to_netns(interface: &str, netns_name: &str) -> Result<(), Error> {
     info!("moving interface {} to netns {}", interface, netns_name);
 
     let handle = misc::netlink_handle()?;
     let netns_file = netns::get_netns_by_name(netns_name)?;
 
-    if let Err(e) = handle
+    handle
         .link()
         .set(0)
-        .name(interface.clone())
+        .name(interface.to_owned())
         .setns_by_fd(netns_file.as_raw_fd())
         .up()
         .execute()
-        .await
-    {
-      error!(
-        "Failed to move {} to netns: {} [Deleting it as a temporary solution...]",
-        interface, e
-      );
-      del(interface).await?;
-    }
+        .await?;
+
     Ok(())
 }
 
@@ -201,19 +195,33 @@ async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
 
 // wrapper to add an XFRM interface by its name in a given netns
 pub async fn add_to_netns(
-    netns_name: Option<String>,
-    interface: String,
-    if_id: u32,
-    alt_names: &[&str],
-    master_dev: Option<String>,
+  netns_name: Option<String>,
+  interface: String,
+  if_id: u32,
+  alt_names: &[&str],
+  master_dev: Option<String>,
 ) -> Result<(), Error> {
-    match netns_name {
-        None => new_xfrm(interface, if_id, alt_names, master_dev).await,
-        Some(my_netns_name) => {
-            new_xfrm(interface.clone(), if_id, alt_names, master_dev).await?;
-            move_to_netns(interface, &my_netns_name).await
+  match netns_name {
+    None => new_xfrm(interface, if_id, alt_names, master_dev).await,
+    Some(my_netns_name) => {
+      new_xfrm(interface.clone(), if_id, alt_names, master_dev).await?;
+      if let Err(e) = move_to_netns(&interface, &my_netns_name).await {
+        error!(
+          "Failed to move {} to netns: {} [Trying to delete it from netns {} and try again]",
+          interface, e, my_netns_name,
+        );
+        let _ = del_in_netns(Some(my_netns_name.clone()), interface.clone()).await;
+        if let Err(e) = move_to_netns(&interface, &my_netns_name).await {
+          error!(
+            "Failed to move {} to netns: {} [Deleting it as a temporary solution...]",
+            interface, e
+          );
+          del(interface).await?;
         }
+      }
+      Ok(())
     }
+  }
 }
 
 // wrapper to delete an interface by its name in a given netns
