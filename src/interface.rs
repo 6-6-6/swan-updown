@@ -210,7 +210,9 @@ pub async fn add_to_netns(
           "Failed to move {} to netns: {} [Trying to delete it from netns {} and try again]",
           interface, e, my_netns_name,
         );
-        let _ = del_in_netns(Some(my_netns_name.clone()), interface.clone()).await;
+        if let Err(e) = del_in_netns(Some(my_netns_name.clone()), interface.clone()).await {
+          error!("Failed to delete {} from netns {}: {}", interface, my_netns_name, e);
+        }
         if let Err(e) = move_to_netns(&interface, &my_netns_name).await {
           error!(
             "Failed to move {} to netns: {} [Deleting it as a temporary solution...]",
