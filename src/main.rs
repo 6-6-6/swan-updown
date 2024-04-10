@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use clap::Parser;
+use env_logger::Builder;
 use log::LevelFilter;
-use log::{error, info};
+use log::{error, warn, info};
 use misc::synthesize;
 use syslog::{BasicLogger, Facility, Formatter3164};
 use tokio::time::timeout;
@@ -56,16 +57,13 @@ async fn main2() -> Result<(), Error> {
         _ => LevelFilter::Debug,
     };
 
-    fn init_env_logger() {
-        env_logger::Builder::from_env(
-            env_logger::Env::default().default_filter_or("swan-updown=warn"),
-        )
-        .init();
+    fn init_env_logger(my_loglevel: LevelFilter) {
+        Builder::new().filter_level(my_loglevel).init();
     }
 
     if args.to_stdout {
         // use stdout
-        init_env_logger();
+        init_env_logger(my_loglevel);
     } else {
         // use syslog
         let formatter = Formatter3164 {
@@ -81,8 +79,8 @@ async fn main2() -> Result<(), Error> {
             }
             // fallback to stdout if syslog goes wrong
             Err(e) => {
-                println!("failed to create logger, swtich to env_logger: {}", e);
-                init_env_logger();
+                init_env_logger(my_loglevel);
+                warn!("failed to create syslog logger, now swtich to env_logger: {}", e);
             }
         }
     }
