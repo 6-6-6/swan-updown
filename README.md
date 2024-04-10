@@ -30,6 +30,8 @@ Options:
   -h, --help             Print help
   -V, --version          Print version
 ```
+#### reminder
+By default `swan-updown` uses `syslog`, if you want it to use `env_logger`, please specify `--to-stdout`.
 
 ### what it will do
 #### interface
