@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use clap::Parser;
 use log::LevelFilter;
-use log::info;
+use log::{error, info};
 use misc::synthesize;
 use syslog::{BasicLogger, Facility, Formatter3164};
 use tokio::time::timeout;
@@ -45,8 +45,7 @@ struct SwanUpdown {
     debug: u8,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main2() -> Result<(), Error> {
     let args = SwanUpdown::parse();
 
     // debug level
@@ -122,4 +121,11 @@ async fn main() -> Result<(), Error> {
       .wrap_err("It takes too long to complete")??;
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+  if let Err(e) = main2().await {
+    error!("main: {:?}", e);
+  }
 }
