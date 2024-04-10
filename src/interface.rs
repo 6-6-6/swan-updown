@@ -1,5 +1,5 @@
-use crate::misc;
-use crate::netns;
+use std::os::unix::prelude::AsRawFd;
+
 use futures::TryStreamExt;
 use log::{debug, error, info, warn};
 // for creating a link
@@ -13,7 +13,10 @@ use netlink_packet_route::link::InfoXfrm;
 use netlink_packet_route::link::LinkInfo;
 use netlink_packet_route::link::State;
 //use netlink_packet_route::link::Nla;
-use std::os::unix::prelude::AsRawFd;
+use eyre::{Error, WrapErr};
+
+use crate::misc;
+use crate::netns;
 
 #[derive(Debug)]
 pub enum GetResults {
@@ -26,12 +29,12 @@ pub enum GetResults {
 }
 
 // Add a new xfrm interface
-pub async fn new_xfrm(
+async fn new_xfrm(
     interface: String,
     if_id: u32,
     alt_names: &[&str],
     master_dev: Option<String>,
-) -> Result<(), ()> {
+) -> Result<(), Error> {
     info!(
         "adding new xfrm interface {}, if_id {}, altname {:#?}",
         interface, if_id, alt_names
@@ -50,7 +53,7 @@ pub async fn new_xfrm(
     add_device_req
         .execute()
         .await
-        .map_err(|e| error!("Failed to add a XFRM interface {}: {}", interface, e))?;
+        .wrap_err_with(|| format!("Failed to add a XFRM interface {}", interface))?;
 
     // add the altname of the interface
     let mut add_prop_req = handle.link().property_add(0).alt_ifname(alt_names);
@@ -65,10 +68,9 @@ pub async fn new_xfrm(
     }
     // get the idx of the master device
     let master_devidx = misc::get_index_by_name(&mut handle, master_dev)
-        .await
-        .map_err(|_| ())?;
+        .await?;
     // bring the interface up after creation
-    if let Err(()) = handle
+    if let Err(e) = handle
         .link()
         .set(0)
         .name(interface.clone())
@@ -76,21 +78,19 @@ pub async fn new_xfrm(
         .controller(master_devidx)
         .execute()
         .await
-        .map_err(|e| {
-            error!(
-                "Failed to bring interface {} up: {}, deleting it...",
-                interface, e
-            )
-        })
     {
-        del(interface).await
-    } else {
-        Ok(())
+      error!(
+        "Failed to bring interface {} up: {}, deleting it...",
+        interface, e
+      );
+      del(interface).await?;
     }
+
+    Ok(())
 }
 
 // wrapper to delete an interface by its name
-pub async fn del(interface: String) -> Result<(), ()> {
+async fn del(interface: String) -> Result<(), Error> {
     info!("deleting interface {}", interface);
 
     let handle = misc::netlink_handle()?;
@@ -104,38 +104,29 @@ pub async fn del(interface: String) -> Result<(), ()> {
     del_req
         .execute()
         .await
-        .map_err(|e| error!("Failed to del interface {}: {}", interface, e))
+        .wrap_err_with(|| format!("Failed to del interface {}", interface))
 }
 
 // move an interface to the given netns
-pub async fn move_to_netns(interface: String, netns_name: &str) -> Result<(), ()> {
+async fn move_to_netns(interface: &str, netns_name: &str) -> Result<(), Error> {
     info!("moving interface {} to netns {}", interface, netns_name);
 
     let handle = misc::netlink_handle()?;
     let netns_file = netns::get_netns_by_name(netns_name)?;
 
-    if let Err(()) = handle
+    handle
         .link()
         .set(0)
-        .name(interface.clone())
+        .name(interface.to_owned())
         .setns_by_fd(netns_file.as_raw_fd())
         .up()
         .execute()
-        .await
-        .map_err(|e| {
-            error!(
-                "Failed to move {} to netns: {} [Deleting it as a temporary solution...]",
-                interface, e
-            )
-        })
-    {
-        del(interface).await
-    } else {
-        Ok(())
-    }
+        .await?;
+
+    Ok(())
 }
 
-pub async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
+async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
     // log
     let handle = misc::netlink_handle().map_err(|_| GetResults::NoHandle)?;
     let mut links = handle.link().get().match_name(name.clone()).execute();
@@ -204,29 +195,44 @@ pub async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
 
 // wrapper to add an XFRM interface by its name in a given netns
 pub async fn add_to_netns(
-    netns_name: Option<String>,
-    interface: String,
-    if_id: u32,
-    alt_names: &[&str],
-    master_dev: Option<String>,
-) -> Result<(), ()> {
-    match netns_name {
-        None => new_xfrm(interface, if_id, alt_names, master_dev).await,
-        Some(my_netns_name) => {
-            new_xfrm(interface.clone(), if_id, alt_names, master_dev).await?;
-            move_to_netns(interface, &my_netns_name).await
+  netns_name: Option<String>,
+  interface: String,
+  if_id: u32,
+  alt_names: &[&str],
+  master_dev: Option<String>,
+) -> Result<(), Error> {
+  match netns_name {
+    None => new_xfrm(interface, if_id, alt_names, master_dev).await,
+    Some(my_netns_name) => {
+      new_xfrm(interface.clone(), if_id, alt_names, master_dev).await?;
+      if let Err(e) = move_to_netns(&interface, &my_netns_name).await {
+        error!(
+          "Failed to move {} to netns: {} [Trying to delete it from netns {} and try again]",
+          interface, e, my_netns_name,
+        );
+        if let Err(e) = del_in_netns(Some(my_netns_name.clone()), interface.clone()).await {
+          error!("Failed to delete {} from netns {}: {}", interface, my_netns_name, e);
         }
+        if let Err(e) = move_to_netns(&interface, &my_netns_name).await {
+          error!(
+            "Failed to move {} to netns: {} [Deleting it as a temporary solution...]",
+            interface, e
+          );
+          del(interface).await?;
+        }
+      }
+      Ok(())
     }
+  }
 }
 
 // wrapper to delete an interface by its name in a given netns
-pub async fn del_in_netns(netns_name: Option<String>, interface: String) -> Result<(), ()> {
+pub async fn del_in_netns(netns_name: Option<String>, interface: String) -> Result<(), Error> {
     match netns_name {
         None => del(interface).await,
         #[allow(clippy::unit_arg)]
         Some(my_netns_name) => netns::operate_in_netns(my_netns_name, del(interface))
-            .await
-            .unwrap_or_else(|e| Err(error!("{}", e))),
+            .await?
     }
 }
 

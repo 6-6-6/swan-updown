@@ -14,7 +14,7 @@ categories = ["command-line-utilities"]
 
 [dependencies]
 rtnetlink = "0.14.0"
-netlink-packet-route = "0.18.1"
+netlink-packet-route = "0.19.0"
 futures = "0.3.29"
 tokio = { version = "1.35.0", default-features = false, features = ["rt-multi-thread", "macros", "time"] }
 nix = { version = "0.27.1", default-features = false, features = ["sched"]}
@@ -23,8 +23,7 @@ hex = { version = "0.4.3" }
 syslog = "6.1.0"
 env_logger = { version = "0.10.1", default-features = false }
 log = { version = "0.4.20", features = ["release_max_level_debug"] }
+eyre = "0.6.12"
 
 [profile.release]
-strip = true
 lto = true
-panic = "abort"

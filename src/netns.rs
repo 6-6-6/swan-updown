@@ -1,19 +1,20 @@
-use futures::Future;
-use log::{error, info};
-use nix::sched::CloneFlags;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::os::unix::io::AsFd;
 use std::path::Path;
+
+use futures::Future;
+use log::info;
+use nix::sched::CloneFlags;
 use tokio::task::JoinError;
+use eyre::Error;
 
 // get netns File descriptor by its name
-pub fn get_netns_by_name(name: &str) -> Result<File, ()> {
+pub fn get_netns_by_name(name: &str) -> Result<File, std::io::Error> {
     info!("opening netns {}", name);
     OpenOptions::new()
         .read(true)
         .open(Path::new("/run/netns").join(name))
-        .map_err(|e| error!("Open netns {} failed: {}", name, e))
 }
 
 pub async fn operate_in_netns<T>(
@@ -32,13 +33,14 @@ where
 }
 
 // after calling this function, the process will move into the given network namespace
-fn into_netns(name: &str) -> Result<(), ()> {
+pub fn into_netns(name: &str) -> Result<(), Error> {
     let netns_fd = get_netns_by_name(name)?;
     info!("switching to netns {}", name);
     let mut setns_flags = CloneFlags::empty();
     // unshare to the new network namespace
-    nix::sched::unshare(CloneFlags::CLONE_NEWNET).map_err(|e| error!("Unshare error: {}", e))?;
+    nix::sched::unshare(CloneFlags::CLONE_NEWNET)?;
     // set netns
     setns_flags.insert(CloneFlags::CLONE_NEWNET);
-    nix::sched::setns(netns_fd.as_fd(), setns_flags).map_err(|e| error!("Setns error: {}", e))
+    nix::sched::setns(netns_fd.as_fd(), setns_flags)?;
+    Ok(())
 }
