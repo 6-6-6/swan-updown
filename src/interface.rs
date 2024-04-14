@@ -215,7 +215,7 @@ pub async fn add_to_netns(
         }
         if let Err(e) = move_to_netns(&interface, &my_netns_name).await {
           error!(
-            "Failed to move {} to netns: {} [Deleting it as a temporary solution...]",
+            "Failed to move {} to netns: {:?}\n[Deleting it as a temporary solution...]",
             interface, e
           );
           del(interface).await?;
@@ -230,7 +230,6 @@ pub async fn add_to_netns(
 pub async fn del_in_netns(netns_name: Option<String>, interface: String) -> Result<(), Error> {
     match netns_name {
         None => del(interface).await,
-        #[allow(clippy::unit_arg)]
         Some(my_netns_name) => netns::operate_in_netns(my_netns_name, del(interface))
             .await?
     }
