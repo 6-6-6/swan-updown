@@ -12,7 +12,7 @@ use netlink_packet_route::link::InfoKind;
 use netlink_packet_route::link::InfoXfrm;
 use netlink_packet_route::link::LinkInfo;
 use netlink_packet_route::link::State;
-//use netlink_packet_route::link::Nla;
+use netlink_packet_utils::nla::DefaultNla;
 use eyre::{Error, WrapErr};
 
 use crate::misc;
@@ -105,6 +105,24 @@ async fn del(interface: String) -> Result<(), Error> {
         .execute()
         .await
         .wrap_err_with(|| format!("Failed to del interface {}", interface))
+}
+
+async fn del_by_altname(altname: String) -> Result<(), Error> {
+    info!("deleting interface by altname {}", altname);
+
+    let handle = misc::netlink_handle()?;
+    let mut del_req = handle.link().del(0);
+
+    let attr = DefaultNla::new(53, altname.clone().into()); // IFLA_ALT_IFNAME
+    del_req
+        .message_mut()
+        .attributes
+        .push(LinkAttribute::Other(attr));
+
+    del_req
+        .execute()
+        .await
+        .wrap_err_with(|| format!("Failed to del by altname {}", altname))
 }
 
 // move an interface to the given netns
@@ -206,14 +224,7 @@ pub async fn add_to_netns(
     Some(my_netns_name) => {
       new_xfrm(interface.clone(), if_id, alt_names, master_dev).await?;
       if let Err(e) = move_to_netns(&interface, &my_netns_name).await {
-        error!(
-          "Failed to move {} to netns: {} [Trying to delete it from netns {} and try again]",
-          interface, e, my_netns_name,
-        );
-        if let Err(e) = del_in_netns(Some(my_netns_name.clone()), interface.clone()).await {
-          error!("Failed to delete {} from netns {}: {}", interface, my_netns_name, e);
-        }
-        if let Err(e) = move_to_netns(&interface, &my_netns_name).await {
+        if let Err(e) = try_handle_eexist(e, &my_netns_name, &interface, alt_names).await {
           error!(
             "Failed to move {} to netns: {:?}\n[Deleting it as a temporary solution...]",
             interface, e
@@ -224,6 +235,25 @@ pub async fn add_to_netns(
       Ok(())
     }
   }
+}
+
+async fn try_handle_eexist(e: Error, my_netns_name: &str, interface: &str, alt_names: &[&str]) -> Result<(), Error> {
+  if !alt_names.is_empty() {
+    if let Some(rtnetlink::Error::NetlinkError(emsg)) = e.downcast_ref::<rtnetlink::Error>() {
+      if emsg.raw_code().abs() == 17 { // EEXIST
+        // if_id has changed but we are creating the new one before deleting the old one, and so altname conflicts
+        error!(
+          "Failed to move {} to netns: {:?}\n[Trying to delete by altname from netns {} and try again]",
+          interface, e, my_netns_name,
+        );
+        if let Err(e) = netns::operate_in_netns(my_netns_name.to_owned(), del_by_altname(alt_names[0].to_owned())).await {
+          error!("Failed to delete for {} from netns {}: {:?}", interface, my_netns_name, e);
+        }
+        return move_to_netns(interface, my_netns_name).await;
+      }
+    }
+  }
+  Err(e)
 }
 
 // wrapper to delete an interface by its name in a given netns
