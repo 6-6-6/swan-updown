@@ -205,23 +205,15 @@ pub async fn add_to_netns(
     None => new_xfrm(interface, if_id, alt_names, master_dev).await,
     Some(my_netns_name) => {
       new_xfrm(interface.clone(), if_id, alt_names, master_dev).await?;
-      if let Err(e) = move_to_netns(&interface, &my_netns_name).await {
-        error!(
-          "Failed to move {} to netns: {} [Trying to delete it from netns {} and try again]",
-          interface, e, my_netns_name,
-        );
-        if let Err(e) = del_in_netns(Some(my_netns_name.clone()), interface.clone()).await {
-          error!("Failed to delete {} from netns {}: {}", interface, my_netns_name, e);
-        }
-        if let Err(e) = move_to_netns(&interface, &my_netns_name).await {
+      match move_to_netns(&interface, &my_netns_name).await {
+        Ok(()) => Ok(()),
+        Err(e) => {
           error!(
             "Failed to move {} to netns: {:?}\n[Deleting it as a temporary solution...]",
-            interface, e
-          );
-          del(interface).await?;
+            interface, e);
+          del(interface).await
         }
       }
-      Ok(())
     }
   }
 }

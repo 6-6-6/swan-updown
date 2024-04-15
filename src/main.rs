@@ -93,14 +93,16 @@ async fn main2() -> Result<(), Error> {
         .wrap_err("parse if_id failed")?;
     let interface_name = synthesize(&if_prefix, conn_if_id);
     let id_pair = format!(
-        "Me: {} <-> Peer: {}",
+        "Me: {} <-> Peer: {} [{}]",
         misc::find_env("PLUTO_MY_ID")?,
-        misc::find_env("PLUTO_PEER_ID")?
+        misc::find_env("PLUTO_PEER_ID")?,
+        misc::find_env("PLUTO_UNIQUEID")?
     );
     let ip_pair = format!(
-        "Me: {} <-> Peer: {}",
+        "Me: {} <-> Peer: {} [{}]",
         misc::find_env("PLUTO_ME")?,
         misc::find_env("PLUTO_PEER")?,
+        misc::find_env("PLUTO_UNIQUEID")?
     );
     let alt_names: Vec<&str> = vec![&id_pair, &ip_pair];
 
