@@ -26,7 +26,7 @@ Options:
   -n, --netns <netns>    Optional network namespace to move interfaces into
   -m, --master <master>  Optional master device to assign interfaces to
       --to-stdout        send log to stdout, otherwise the log will be sent to syslog
-  -d, --debug...         (it only applies to syslog) set it multiple time to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
+  -d, --debug...         set it multiple times to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
   -h, --help             Print help
   -V, --version          Print version
 ```

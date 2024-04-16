@@ -41,7 +41,7 @@ struct SwanUpdown {
     /// send log to stdout, otherwise the log will be sent to syslog
     #[arg(long, action = clap::ArgAction::SetTrue)]
     to_stdout: bool,
-    /// (it only applies to syslog) set it multiple time to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
+    /// set it multiple times to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
     #[arg(short, long, action = clap::ArgAction::Count)]
     debug: u8,
 }
