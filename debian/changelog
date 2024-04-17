@@ -1,3 +1,10 @@
+swan-updown (0.3.1) stable; urgency=low
+
+  * #4 by @lilydjwg find out the real reason why xfrms cannot be moved into
+  netns
+
+ -- Zhang Zongyu <zongyu@novazy.net>  Tue, 17 Apr 2024 14:26:20 +0000
+
 swan-updown (0.3.0) stable; urgency=low
 
   * try to handle xfrm creation/reassign to netns related errors
