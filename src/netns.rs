@@ -4,11 +4,11 @@ use std::os::unix::io::AsFd;
 use std::path::Path;
 use std::thread;
 
+use eyre::Error;
 use futures::Future;
 use log::info;
 use nix::sched::CloneFlags;
 use tokio::sync::oneshot::{self, error::RecvError};
-use eyre::Error;
 
 // get netns File descriptor by its name
 pub fn get_netns_by_name(name: &str) -> Result<File, std::io::Error> {

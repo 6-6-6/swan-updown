@@ -67,8 +67,7 @@ async fn new_xfrm(
         warn!("Failed to add altname for {}: {}", interface, e)
     }
     // get the idx of the master device
-    let master_devidx = misc::get_index_by_name(&mut handle, master_dev)
-        .await?;
+    let master_devidx = misc::get_index_by_name(&mut handle, master_dev).await?;
     // bring the interface up after creation
     if let Err(e) = handle
         .link()
@@ -79,11 +78,11 @@ async fn new_xfrm(
         .execute()
         .await
     {
-      error!(
-        "Failed to bring interface {} up: {}, deleting it...",
-        interface, e
-      );
-      del(interface).await?;
+        error!(
+            "Failed to bring interface {} up: {}, deleting it...",
+            interface, e
+        );
+        del(interface).await?;
     }
 
     Ok(())
@@ -195,35 +194,34 @@ async fn get(name: String, expected_if_id: u32) -> Result<(), GetResults> {
 
 // wrapper to add an XFRM interface by its name in a given netns
 pub async fn add_to_netns(
-  netns_name: Option<String>,
-  interface: String,
-  if_id: u32,
-  alt_names: &[&str],
-  master_dev: Option<String>,
+    netns_name: Option<String>,
+    interface: String,
+    if_id: u32,
+    alt_names: &[&str],
+    master_dev: Option<String>,
 ) -> Result<(), Error> {
-  match netns_name {
-    None => new_xfrm(interface, if_id, alt_names, master_dev).await,
-    Some(my_netns_name) => {
-      new_xfrm(interface.clone(), if_id, alt_names, master_dev).await?;
-      match move_to_netns(&interface, &my_netns_name).await {
-        Ok(()) => Ok(()),
-        Err(e) => {
-          error!(
+    match netns_name {
+        None => new_xfrm(interface, if_id, alt_names, master_dev).await,
+        Some(my_netns_name) => {
+            new_xfrm(interface.clone(), if_id, alt_names, master_dev).await?;
+            match move_to_netns(&interface, &my_netns_name).await {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    error!(
             "Failed to move {} to netns: {:?}\n[Deleting it as a temporary solution...]",
             interface, e);
-          del(interface).await
+                    del(interface).await
+                }
+            }
         }
-      }
     }
-  }
 }
 
 // wrapper to delete an interface by its name in a given netns
 pub async fn del_in_netns(netns_name: Option<String>, interface: String) -> Result<(), Error> {
     match netns_name {
         None => del(interface).await,
-        Some(my_netns_name) => netns::operate_in_netns(my_netns_name, del(interface))
-            .await?
+        Some(my_netns_name) => netns::operate_in_netns(my_netns_name, del(interface)).await?,
     }
 }
 

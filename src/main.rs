@@ -42,7 +42,11 @@ struct SwanUpdown {
     #[arg(short, long, value_name = "babeld_sock")]
     babeld_sock: Option<String>,
     /// The babeld config for the interfaces
-    #[arg(long, value_name = "babeld_conf", default_value = "type tunnel link-quality true")]
+    #[arg(
+        long,
+        value_name = "babeld_conf",
+        default_value = "type tunnel link-quality true"
+    )]
     babeld_conf: String,
 
     // for debug
@@ -88,7 +92,10 @@ async fn main2() -> Result<(), Error> {
             // fallback to stdout if syslog goes wrong
             Err(e) => {
                 init_env_logger(my_loglevel);
-                warn!("failed to create syslog logger, now swtich to env_logger: {}", e);
+                warn!(
+                    "failed to create syslog logger, now swtich to env_logger: {}",
+                    e
+                );
             }
         }
     }
@@ -128,12 +135,15 @@ async fn main2() -> Result<(), Error> {
     info!("creating corresponding XFRM interface");
     // whether we communicate the babeld socket
     if let Some(sock_path) = args.babeld_sock {
-        tasks.push(executor::babeld_updown(
-            &trigger,
-            sock_path,
-            interface_name.clone(),
-            args.babeld_conf
-            ).boxed());
+        tasks.push(
+            executor::babeld_updown(
+                &trigger,
+                sock_path,
+                interface_name.clone(),
+                args.babeld_conf,
+            )
+            .boxed(),
+        );
         info!("adding corresponding XFRM interface to babeld");
     }
 

@@ -48,7 +48,11 @@ pub async fn babeld_updown(
     config_line: String,
 ) -> Result<(), Error> {
     if trigger.starts_with("up-client") {
-        babeld_cmd(&babeld_sock_path, &format!("interface {} {}", interface_name, config_line)).await
+        babeld_cmd(
+            &babeld_sock_path,
+            &format!("interface {} {}", interface_name, config_line),
+        )
+        .await
     } else if trigger.starts_with("down-client") {
         babeld_cmd(
             &babeld_sock_path,
