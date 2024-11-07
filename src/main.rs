@@ -1,35 +1,34 @@
+use futures::future::join_all;
+use futures::FutureExt;
 use std::time::Duration;
 
 use clap::Parser;
 use env_logger::Builder;
+use eyre::{Error, WrapErr};
 use log::LevelFilter;
-use log::{error, warn, info};
+use log::{error, info, warn};
 use misc::synthesize;
 use syslog::{BasicLogger, Facility, Formatter3164};
 use tokio::time::timeout;
-use eyre::{Error, WrapErr};
 
+mod babeld;
 mod executor;
 mod interface;
 mod misc;
 mod netns;
 
+// pkg name
 const MYSELF: &str = "swan-updown";
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct SwanUpdown {
-    /*
-    /// things available: [interface], can be specified multiple times
-    #[arg(long, value_name = "enable")]
-    enable: Vec<String>,
-     */
     // needed by [all],
-    /// the prefix of the created interfaces, default to [swan]
-    #[arg(short, long, value_name = "prefix")]
-    prefix: Option<String>,
+    /// The prefix of the created interfaces
+    #[arg(short, long, value_name = "prefix", default_value = "swan")]
+    prefix: String,
     // needed by [interface],
-    ///Optional network namespace to move interfaces into
+    /// Optional network namespace to move interfaces into
     #[arg(short, long, value_name = "netns")]
     netns: Option<String>,
     // needed by [interface],
@@ -37,11 +36,20 @@ struct SwanUpdown {
     #[arg(short, long, value_name = "master")]
     master: Option<String>,
 
+    // needed by [babeld],
+    /// The path of the babeld socket
+    /// (This enables adding/deleting interfaces to babeld)
+    #[arg(short, long, value_name = "babeld_sock")]
+    babeld_sock: Option<String>,
+    /// The babeld config for the interfaces
+    #[arg(long, value_name = "babeld_conf", default_value = "type tunnel link-quality true")]
+    babeld_conf: String,
+
     // for debug
-    /// send log to stdout, otherwise the log will be sent to syslog
+    /// Send log to stdout, otherwise the log will be sent to syslog
     #[arg(long, action = clap::ArgAction::SetTrue)]
     to_stdout: bool,
-    /// set it multiple times to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
+    /// Set it multiple times to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
     #[arg(short, long, action = clap::ArgAction::Count)]
     debug: u8,
 }
@@ -85,13 +93,12 @@ async fn main2() -> Result<(), Error> {
         }
     }
 
-    let if_prefix = args.prefix.unwrap_or_else(|| "swan".into());
     let trigger = misc::find_env("PLUTO_VERB")?;
     // TODO: what if IF_ID_IN and IF_ID_OUT are different?
     let conn_if_id: u32 = misc::find_env("PLUTO_IF_ID_IN")?
         .parse::<u32>()
         .wrap_err("parse if_id failed")?;
-    let interface_name = synthesize(&if_prefix, conn_if_id);
+    let interface_name = synthesize(&args.prefix, conn_if_id);
     let id_pair = format!(
         "Me: {} <-> Peer: {} [{}]",
         misc::find_env("PLUTO_MY_ID")?,
@@ -106,26 +113,43 @@ async fn main2() -> Result<(), Error> {
     );
     let alt_names: Vec<&str> = vec![&id_pair, &ip_pair];
 
-    let task = executor::interface_updown(
-        &trigger,
-        args.netns.clone(),
-        interface_name.clone(),
-        conn_if_id,
-        &alt_names,
-        args.master,
+    let mut tasks = Vec::new();
+    tasks.push(
+        executor::interface_updown(
+            &trigger,
+            args.netns.clone(),
+            interface_name.clone(),
+            conn_if_id,
+            &alt_names,
+            args.master,
+        )
+        .boxed(),
     );
-    info!("enabling module interface");
+    info!("creating corresponding XFRM interface");
+    // whether we communicate the babeld socket
+    if let Some(sock_path) = args.babeld_sock {
+        tasks.push(executor::babeld_updown(
+            &trigger,
+            sock_path,
+            interface_name.clone(),
+            args.babeld_conf
+            ).boxed());
+        info!("adding corresponding XFRM interface to babeld");
+    }
 
-    timeout(Duration::from_secs(60), task)
-      .await
-      .wrap_err("It takes too long to complete")??;
+    for res in timeout(Duration::from_secs(60), join_all(tasks))
+        .await
+        .wrap_err("It takes too long to complete")?
+    {
+        res?
+    }
 
     Ok(())
 }
 
 #[tokio::main]
 async fn main() {
-  if let Err(e) = main2().await {
-    error!("main: {:?}", e);
-  }
+    if let Err(e) = main2().await {
+        error!("main: {:?}", e);
+    }
 }
