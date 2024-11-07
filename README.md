@@ -22,13 +22,15 @@ swan-updown helps create ipsec interfaces
 Usage: swan-updown [OPTIONS]
 
 Options:
-  -p, --prefix <prefix>  the prefix of the created interfaces, default to [swan]
-  -n, --netns <netns>    Optional network namespace to move interfaces into
-  -m, --master <master>  Optional master device to assign interfaces to
-      --to-stdout        send log to stdout, otherwise the log will be sent to syslog
-  -d, --debug...         set it multiple times to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
-  -h, --help             Print help
-  -V, --version          Print version
+  -p, --prefix <prefix>            The prefix of the created interfaces [default: swan]
+  -n, --netns <netns>              Optional network namespace to move interfaces into
+  -m, --master <master>            Optional master device to assign interfaces to
+  -b, --babeld-sock <babeld_sock>  The path of the babeld socket (This enables adding/deleting interfaces to babeld)
+      --babeld-conf <babeld_conf>  The babeld config for the interfaces [default: "type tunnel link-quality true"]
+      --to-stdout                  Send log to stdout, otherwise the log will be sent to syslog
+  -d, --debug...                   Set it multiple times to increase log level, [0: Error, 1: Warn, 2: Info, 3: Debug]
+  -h, --help                       Print help
+  -V, --version                    Print version
 ```
 #### reminder
 By default `swan-updown` uses `syslog`, if you want it to use `env_logger`, please specify `--to-stdout`.
